@@ -1,0 +1,9 @@
+[submodule "external/a2lfile"]
+	path = external/a2lfile
+	url = https://github.com/DanielT/a2lfile.git
+[submodule "external/a2ltool"]
+	path = external/a2ltool
+	url = https://github.com/DanielT/a2ltool.git
+[submodule "external/PowerSpawn"]
+	path = external/PowerSpawn
+	url = https://github.com/CynaCons/PowerSpawn.git

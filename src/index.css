@@ -1,0 +1,47 @@
+:root {
+  font-family: "Segoe UI", "Inter", system-ui, sans-serif;
+  line-height: 1.5;
+  font-weight: 400;
+  color-scheme: dark;
+  background-color: #1e1e1e;
+  font-feature-settings: "rlig" 1, "calt" 1;
+}
+
+body {
+  margin: 0;
+  padding: 0;
+  width: 100vw;
+  height: 100vh;
+  overflow: hidden;
+  user-select: none;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Scrollbars */
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+::-webkit-scrollbar-corner {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background-color: #424242;
+  border: 2px solid #1e1e1e;
+  border-radius: 10px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background-color: #4f4f4f;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+/* Tree View specific tweaks */
+.MuiTreeItem-content {
+  padding: 4px 8px !important;
+  border-radius: 4px;
+}
+.MuiTreeItem-label {
+  font-size: 13px !important;
+}

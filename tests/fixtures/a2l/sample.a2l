@@ -1,0 +1,7 @@
+ASAP2_VERSION 1 71
+/begin PROJECT demo_project "Demo Project"
+  /begin HEADER "Demo header for OpenT A2L Forge"
+  /end HEADER
+  /begin MODULE demo_module "Demo Module"
+  /end MODULE
+/end PROJECT

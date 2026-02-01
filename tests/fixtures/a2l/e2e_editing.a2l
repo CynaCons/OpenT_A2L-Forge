@@ -1,0 +1,39 @@
+ASAP2_VERSION 1 71
+/begin PROJECT demo_editing "Editing Demo"
+  /begin HEADER "Header"
+  /end HEADER
+  /begin MODULE demo_module "Demo Module"
+    /begin MEASUREMENT EngineSpeed "Engine Speed"
+      UWORD
+      NO_COMPU_METHOD
+      0 0
+      0 10000
+      ECU_ADDRESS 0x1000
+    /end MEASUREMENT
+
+    /begin CHARACTERISTIC MaxRPM "Maximum RPM"
+      VALUE
+      0x2000
+      RecLayout_Value
+      0
+      NO_COMPU_METHOD
+      0 8000
+    /end CHARACTERISTIC
+
+    /begin AXIS_PTS RPM_Axis "RPM Axis Points"
+      0x3000
+      EngineSpeed
+      RecLayout_Axis
+      0
+      NO_COMPU_METHOD
+      8
+      0 8000
+    /end AXIS_PTS
+
+    /begin RECORD_LAYOUT RecLayout_Value
+    /end RECORD_LAYOUT
+
+    /begin RECORD_LAYOUT RecLayout_Axis
+    /end RECORD_LAYOUT
+  /end MODULE
+/end PROJECT
