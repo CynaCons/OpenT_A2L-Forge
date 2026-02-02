@@ -21,6 +21,13 @@ import {
   InputBase,
   Card,
   CardContent,
+  Table,
+  TableBody,
+  TableCell,
+  TableContainer,
+  TableHead,
+  TableRow,
+  Checkbox,
 } from "@mui/material";
 import { SimpleTreeView, TreeItem } from "@mui/x-tree-view";
 import {
@@ -43,7 +50,11 @@ import {
   DataObject,
   Edit as EditIcon,
   Terminal,
+  FilterNone,
+  Save as SaveIcon,
 } from "@mui/icons-material";
+
+import "./titlebar.css";
 
 import { MeasurementEditor } from "./components/editors/MeasurementEditor";
 import { CharacteristicEditor } from "./components/editors/CharacteristicEditor";
@@ -106,6 +117,15 @@ type RecentFile = {
   name: string;
   path?: string | null;
   lastOpened: number;
+};
+
+type ElfSymbol = {
+  name: string;
+  address: number;
+  size: number;
+  bind: string;
+  type_str: string;
+  section: string;
 };
 
 // --- Theme ---
@@ -230,6 +250,7 @@ function App() {
   const [searchQuery, setSearchQuery] = useState("");
   const [metadata, setMetadata] = useState<A2lMetadata | null>(null);
   const [fileName, setFileName] = useState("");
+  const [currentFilePath, setCurrentFilePath] = useState<string | null>(null);
   const [status, setStatus] = useState<StatusState | null>(null);
   const [isBusy, setIsBusy] = useState(false);
   const [elfFileName, setElfFileName] = useState("");
@@ -240,6 +261,8 @@ function App() {
   const [recentA2lFiles, setRecentA2lFiles] = useState<RecentFile[]>([]);
   const [recentElfFiles, setRecentElfFiles] = useState<RecentFile[]>([]);
   const [isEditing, setIsEditing] = useState(false);
+  const [elfSymbols, setElfSymbols] = useState<ElfSymbol[]>([]);
+  const [selectedElfSymbols, setSelectedElfSymbols] = useState<Set<string>>(new Set());
   const statusTimeoutRef = useRef<number | null>(null);
 
   const refreshTree = async () => {
@@ -287,7 +310,8 @@ function App() {
       const raw = window.localStorage.getItem(key);
       if (!raw) return [];
       const parsed = JSON.parse(raw) as RecentFile[];
-      return Array.isArray(parsed) ? parsed : [];
+      // Only return entries that represent a valid path, otherwise we can't reload them
+      return Array.isArray(parsed) ? parsed.filter(f => !!f.path) : [];
     } catch {
       return [];
     }
@@ -367,28 +391,44 @@ function App() {
 
   // --- Handlers ---
 
-  async function handleFileSelect(file?: File | null) {
-    if (!file) return;
+  async function handleFileSelect(fileInput: File | { name: string; path?: string | null } | null) {
+    if (!fileInput) return;
     setIsBusy(true);
     pushStatus("info", "Loading ...", false);
-    const filePath = (file as { path?: string }).path ?? null;
-    setFileName(file.name);
+    
+    // Check if it's a real File object (has arrayBuffer/text methods)
+    const isRealFile = "text" in fileInput && typeof (fileInput as any).text === "function";
+    const filePath = (fileInput as any).path;
+    setFileName(fileInput.name);
+    setCurrentFilePath(filePath || null);
+
     try {
-      const contents = await file.text();
-      try {
-        const result = await invoke<A2lMetadata>("load_a2l_from_string", { contents });
-        setMetadata(result);
+        let metadata: A2lMetadata;
+        // Use text() for dropped/selected files, invoke path for recents/files with path on disk
+        if (isRealFile) {
+             const contents = await (fileInput as File).text();
+             metadata = await invoke<A2lMetadata>("load_a2l_from_string", { contents });
+        } else if (filePath) {
+             metadata = await invoke<A2lMetadata>("load_a2l_from_path", { path: filePath });
+        } else {
+             throw new Error("Cannot load file: missing path or content source.");
+        }
+        
+        setMetadata(metadata);
         const tree = await invoke<A2lTree>("list_a2l_tree");
         setA2lTree(tree);
-        addRecentFile(RECENT_A2L_KEY, recentA2lFiles, setRecentA2lFiles, {
-            name: file.name, path: filePath, lastOpened: Date.now(),
-        });
+
+        if (filePath) {
+            addRecentFile(RECENT_A2L_KEY, recentA2lFiles, setRecentA2lFiles, {
+                name: fileInput.name, 
+                path: filePath, 
+                lastOpened: Date.now(),
+            });
+        }
         pushStatus("success", "Loaded successfully.");
-      } catch (error) {
-         pushStatus("error", `Backend load failed: ${error}`, false);
-      }
     } catch(e) {
-        pushStatus("error", "File read error", false);
+        console.error(e);
+        pushStatus("error", `Load failed: ${e}`, false);
     } finally {
         setIsBusy(false);
     }
@@ -400,6 +440,7 @@ function App() {
     pushStatus("info", "Creating new A2L...", false);
     const contents = `ASAP2_VERSION 1 71\n/begin PROJECT new_project ""\n  /begin MODULE new_module ""\n  /end MODULE\n/end PROJECT`;
     setFileName("new_project.a2l");
+    setCurrentFilePath(null);
     try {
         const result = await invoke<A2lMetadata>("load_a2l_from_string", { contents });
         setMetadata(result);
@@ -413,10 +454,125 @@ function App() {
     }
   }
 
+  async function handleSaveA2l() {
+    if (isBusy || !metadata) return;
+    setIsBusy(true);
+    
+    try {
+        if (currentFilePath) {
+             pushStatus("info", "Saving...", false);
+             await invoke("save_a2l_to_path", { path: currentFilePath });
+             pushStatus("success", "Saved successfully.");
+        } else {
+             const name = prompt("Enter file path to save (absolute path):", fileName || "new_project.a2l");
+             if (name) {
+                 pushStatus("info", "Saving...", false);
+                 await invoke("save_a2l_to_path", { path: name });
+                 setCurrentFilePath(name);
+                 setFileName(name.split(/[\\/]/).pop() || name); // naive
+                 pushStatus("success", "Saved successfully.");
+             }
+        }
+    } catch (e) {
+        pushStatus("error", `Save failed: ${e}`);
+    } finally {
+        setIsBusy(false);
+    }
+  }
+
   // Window Controls
+  const [isMaximized, setIsMaximized] = useState(false);
+
+  useEffect(() => {
+    const updateState = async () => {
+        setIsMaximized(await getCurrentWindow().isMaximized());
+    };
+    updateState();
+
+    // Listen to resize events to update the icon if the user snaps the window
+    // Note: Tauri v2 APIs might differ slightly, checking periodically or on focus is a safe fallback
+    const interval = setInterval(updateState, 1000);
+    return () => clearInterval(interval);
+  }, []);
+
   const handleMinimize = () => getCurrentWindow().minimize().catch(() => {});
-  const handleToggleMaximize = () => getCurrentWindow().toggleMaximize().catch(() => {});
+  const handleToggleMaximize = async () => {
+      await getCurrentWindow().toggleMaximize();
+      setIsMaximized(await getCurrentWindow().isMaximized());
+  };
   const handleClose = () => getCurrentWindow().close().catch(() => {});
+
+  async function handleLoadElf(file: File) {
+      if (!file) return;
+      setIsBusy(true);
+      pushStatus("info", "Loading ELF symbols...", false);
+      const filePath = (file as any).path;
+      if (!filePath) {
+          pushStatus("error", "Cannot load ELF (path requisite)"); // Web browser restriction
+          setIsBusy(false);
+          return;
+      }
+      setElfFileName(file.name);
+      
+      try {
+          const symbols = await invoke<ElfSymbol[]>("load_elf_symbols", { path: filePath });
+          setElfSymbols(symbols);
+          setSelectedElfSymbols(new Set());
+          
+          // Add to recents
+          addRecentFile(RECENT_ELF_KEY, recentElfFiles, setRecentElfFiles, {
+             name: file.name, path: filePath, lastOpened: Date.now()
+          });
+
+          pushStatus("success", `Loaded ${symbols.length} symbols.`);
+      } catch (e) {
+          pushStatus("error", `ELF load failed: ${e}`);
+          setElfSymbols([]);
+      } finally {
+          setIsBusy(false);
+      }
+  }
+
+  async function handleAddSymbols() {
+      if (selectedElfSymbols.size === 0) return;
+      if (!metadata) {
+          pushStatus("error", "No A2L project loaded to add to.");
+          return;
+      }
+      
+      setIsBusy(true);
+      try {
+          const toAdd = elfSymbols.filter(s => selectedElfSymbols.has(s.name));
+          
+          // We assume update_project_metadata etc returns EntityUpdateResult, but create_measurements_from_elf matches signature
+          // But wait, my previous code for update_project_metadata returned A2lMetadata, not EntityUpdateResult.
+          // Let's check lib.rs again. Ah, create_measurements_from_elf returns EntityUpdateResult.
+          // list_a2l_tree is separate.
+          
+          interface EntityUpdateResult {
+             metadata: A2lMetadata;
+             entities: CoreEntity[];
+          }
+
+          const result = await invoke<EntityUpdateResult>("create_measurements_from_elf", { 
+              moduleName: metadata.module_names[0], 
+              symbols: toAdd 
+          });
+
+          setMetadata(result.metadata);
+          
+          // Refresh tree
+          const tree = await invoke<A2lTree>("list_a2l_tree");
+          setA2lTree(tree);
+          
+          pushStatus("success", `Added ${toAdd.length} measurements.`);
+          setSelectedElfSymbols(new Set());
+      } catch (e) {
+          pushStatus("error", `Failed to add symbols: ${e}`);
+      } finally {
+          setIsBusy(false);
+      }
+  }
 
   // --- Render Sections ---
 
@@ -460,7 +616,16 @@ function App() {
   );
 
   const renderSideBar = () => (
-    <Box sx={{ width: 280, bgcolor: "#252526", display: "flex", flexDirection: "column", borderRight: "1px solid #333" }}>
+    <Box sx={{ 
+        minWidth: 280,
+        maxWidth: "40vw",
+        width: "fit-content",
+        bgcolor: "#252526", 
+        display: "flex", 
+        flexDirection: "column", 
+        borderRight: "1px solid #333",
+        whiteSpace: "nowrap"
+    }}>
         {activeView === "a2l" && (
             <>
                 <Box sx={{ p: 1, px: 2, display: "flex", alignItems: "center", justifyContent: "space-between" }}>
@@ -475,6 +640,11 @@ function App() {
                                 <input type="file" accept=".a2l" hidden onChange={(e) => handleFileSelect(e.target.files?.[0])} />
                             </IconButton>
                         </Tooltip>
+                        {metadata && (
+                            <Tooltip title="Save A2L">
+                                <IconButton size="small" onClick={handleSaveA2l}><SaveIcon fontSize="small" /></IconButton>
+                            </Tooltip>
+                        )}
                     </Stack>
                 </Box>
                 
@@ -594,14 +764,116 @@ function App() {
                 <Divider sx={{ my: 2 }} />
                 <Button variant="outlined" component="label" fullWidth startIcon={<FolderOpenIcon />}>
                     Load ELF Binary
-                    <input type="file" hidden onChange={(e) => setElfFileName(e.target.files?.[0]?.name ?? "")} />
+                    <input type="file" hidden onChange={(e) => handleLoadElf(e.target.files![0])} />
                 </Button>
+
+                {recentElfFiles.length > 0 && (
+                    <Box sx={{ mt: 3 }}>
+                         <Typography variant="caption" color="text.secondary">RECENT</Typography>
+                         <List dense>
+                            {recentElfFiles.map(file => (
+                                <ListItemButton key={file.name + file.lastOpened} onClick={() => {
+                                    handleLoadElf({ name: file.name, path: file.path } as any)
+                                }}>
+                                    <ListItemIcon sx={{ minWidth: 32 }}><MemoryIcon fontSize="small" sx={{ fontSize: 16 }} /></ListItemIcon>
+                                    <ListItemText primary={file.name} secondary={file.path} primaryTypographyProps={{noWrap:true, fontSize: 12}} secondaryTypographyProps={{noWrap:true, fontSize: 10}} />
+                                </ListItemButton>
+                            ))}
+                         </List>
+                    </Box>
+                )}
+            </Box>
+        )}
+        {activeView === "settings" && (
+             <Box sx={{ p: 2 }}>
+                <Typography variant="overline">SETTINGS</Typography>
+                <Divider sx={{ my: 2 }} />
+                <Typography variant="body2" color="text.secondary">No settings available.</Typography>
             </Box>
         )}
     </Box>
   );
 
   const renderMainArea = () => {
+    if (activeView === "elf") {
+        return (
+             <Box sx={{ flex: 1, display: "flex", flexDirection: "column", height: "100%", bgcolor: "#1e1e1e", overflow: "hidden" }}>
+                  <Box sx={{ p: 2, px: 3, borderBottom: "1px solid #333", display: "flex", alignItems: "center", justifyContent: "space-between", height: 50, bgcolor: "#252526" }}>
+                      <Stack direction="row" spacing={2} alignItems="center">
+                          <MemoryIcon sx={{ color: "#4ec9b0" }} />
+                          <Typography variant="h6" sx={{ fontSize: 14 }}>ELF Symbols</Typography> 
+                          {elfSymbols.length > 0 && <Chip label={`${elfSymbols.length} Found`} size="small" variant="outlined" sx={{ height: 20 }} />}
+                          {selectedElfSymbols.size > 0 && <Chip label={`${selectedElfSymbols.size} Selected`} size="small" color="primary" sx={{ height: 20 }} />}
+                      </Stack>
+                      <Stack direction="row" spacing={1}>
+                          <Button 
+                              variant="contained" 
+                              disabled={selectedElfSymbols.size === 0 || !metadata}
+                              startIcon={<AddIcon />}
+                              size="small"
+                              onClick={handleAddSymbols}
+                          >
+                              Add to Project
+                          </Button>
+                      </Stack>
+                  </Box>
+                  
+                  {elfSymbols.length > 0 ? (
+                      <TableContainer sx={{ flex: 1, overflow: "auto" }}>
+                          <Table stickyHeader size="small">
+                              <TableHead>
+                                  <TableRow>
+                                      <TableCell padding="checkbox" sx={{ bgcolor: "#1e1e1e" }}>
+                                          <Checkbox 
+                                              checked={selectedElfSymbols.size === elfSymbols.length && elfSymbols.length > 0}
+                                              indeterminate={selectedElfSymbols.size > 0 && selectedElfSymbols.size < elfSymbols.length}
+                                              onChange={(e) => {
+                                                  if (e.target.checked) setSelectedElfSymbols(new Set(elfSymbols.map(s => s.name)));
+                                                  else setSelectedElfSymbols(new Set());
+                                              }}
+                                              size="small"
+                                          />
+                                      </TableCell>
+                                      <TableCell sx={{ bgcolor: "#1e1e1e", fontWeight: 600 }}>Name</TableCell>
+                                      <TableCell sx={{ bgcolor: "#1e1e1e", fontWeight: 600 }}>Address</TableCell>
+                                      <TableCell sx={{ bgcolor: "#1e1e1e", fontWeight: 600 }}>Size</TableCell>
+                                      <TableCell sx={{ bgcolor: "#1e1e1e", fontWeight: 600 }}>Type</TableCell>
+                                      <TableCell sx={{ bgcolor: "#1e1e1e", fontWeight: 600 }}>Section</TableCell>
+                                  </TableRow>
+                              </TableHead>
+                              <TableBody>
+                                  {elfSymbols.map((row) => (
+                                      <TableRow key={row.name} hover selected={selectedElfSymbols.has(row.name)} onClick={() => {
+                                           const next = new Set(selectedElfSymbols);
+                                           if (next.has(row.name)) next.delete(row.name);
+                                           else next.add(row.name);
+                                           setSelectedElfSymbols(next);
+                                      }} sx={{ cursor: "pointer" }}>
+                                          <TableCell padding="checkbox">
+                                              <Checkbox 
+                                                  checked={selectedElfSymbols.has(row.name)}
+                                                  size="small"
+                                              />
+                                          </TableCell>
+                                          <TableCell sx={{ fontFamily: "monospace" }}>{row.name}</TableCell>
+                                          <TableCell sx={{ fontFamily: "monospace", color: "#4ec9b0" }}>0x{row.address.toString(16).toUpperCase()}</TableCell>
+                                          <TableCell>{row.size}</TableCell>
+                                          <TableCell><Chip label={row.type_str} size="small" variant="outlined" sx={{ height: 16, fontSize: 10 }} /></TableCell>
+                                          <TableCell sx={{ color: "#888" }}>{row.section}</TableCell>
+                                      </TableRow>
+                                  ))}
+                              </TableBody>
+                          </Table>
+                      </TableContainer>
+                  ) : (
+                      <Box sx={{ display: "flex", flex: 1, alignItems: "center", justifyContent: "center", flexDirection: "column", opacity: 0.5 }}>
+                          <Typography>Load an ELF binary from the sidebar to view symbols.</Typography>
+                      </Box>
+                  )}
+            </Box>
+        );
+    }
+
     if (!selectedItem) {
         return (
             <Box sx={{ display: "flex", flex: 1, alignItems: "center", justifyContent: "center", flexDirection: "column", opacity: 0.2 }}>
@@ -717,16 +989,44 @@ function App() {
       <Box sx={{ display: "flex", flexDirection: "column", height: "100vh", bgcolor: "#1e1e1e", overflow: "hidden" }}>
         
         {/* Custom Titlebar */}
-        <Box sx={{ height: 32, display: "flex", alignItems: "center", borderBottom: 1, borderColor: "divider", WebkitAppRegion: "drag", bgcolor: "#1e1e1e" }} onDoubleClick={handleToggleMaximize}>
-             <Box sx={{ px: 2, display: "flex", alignItems: "center", gap: 1 }}>
+        <Box 
+            sx={{ 
+                height: 32, 
+                display: "flex", 
+                alignItems: "center", 
+                borderBottom: 1, 
+                borderColor: "divider", 
+                bgcolor: "#1e1e1e",
+                userSelect: "none"
+            }} 
+        >
+             {/* Draggable Area - Title and Spacer */}
+             <Box 
+                className="titlebar-drag"
+                sx={{ 
+                    flex: 1,
+                    height: "100%",
+                    display: "flex", 
+                    alignItems: "center", 
+                    pl: 2,
+                    gap: 1
+                }}
+                onDoubleClick={handleToggleMaximize}
+             >
                 <DataObject sx={{ fontSize: 16, color: "#007acc" }} />
                 <Typography variant="caption" sx={{ fontWeight: 600 }}>OpenT A2L Forge</Typography>
              </Box>
-             <Box sx={{ flex: 1 }} />
-             <Box sx={{ WebkitAppRegion: "no-drag", display: "flex" }}>
-                <IconButton size="small" onClick={handleMinimize} sx={{ borderRadius: 0, width: 40, height: 32, "&:hover":{ bgcolor: "rgba(255,255,255,0.1)"} }}><Minimize sx={{ fontSize: 16 }} /></IconButton>
-                <IconButton size="small" onClick={handleToggleMaximize} sx={{ borderRadius: 0, width: 40, height: 32, "&:hover":{ bgcolor: "rgba(255,255,255,0.1)"} }}><CropSquare sx={{ fontSize: 14 }} /></IconButton>
-                <IconButton size="small" onClick={handleClose} sx={{ borderRadius: 0, width: 40, height: 32, "&:hover":{ bgcolor: "#c42b1c" } }}><CloseIcon sx={{ fontSize: 16 }} /></IconButton>
+
+             {/* Window Controls - Non-draggable */}
+             <Box 
+                className="titlebar-no-drag" 
+                sx={{ display: "flex", height: "100%" }}
+             >
+                <IconButton size="small" onClick={handleMinimize} sx={{ borderRadius: 0, width: 40, height: "100%", "&:hover":{ bgcolor: "rgba(255,255,255,0.1)"} }}><Minimize sx={{ fontSize: 16 }} /></IconButton>
+                <IconButton size="small" onClick={handleToggleMaximize} sx={{ borderRadius: 0, width: 40, height: "100%", "&:hover":{ bgcolor: "rgba(255,255,255,0.1)"} }}>
+                    {isMaximized ? <FilterNone sx={{ fontSize: 14 }} /> : <CropSquare sx={{ fontSize: 14 }} />}
+                </IconButton>
+                <IconButton size="small" onClick={handleClose} sx={{ borderRadius: 0, width: 40, height: "100%", "&:hover":{ bgcolor: "#c42b1c" } }}><CloseIcon sx={{ fontSize: 16 }} /></IconButton>
              </Box>
         </Box>
 

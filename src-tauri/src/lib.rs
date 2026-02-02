@@ -1,5 +1,6 @@
 use std::sync::Mutex;
 use std::fs;
+use goblin::elf::Elf;
 
 use serde::{Serialize, Deserialize};
 use a2lfile::{A2lObjectName, A2lObjectNameSetter, Header, ItemList};
@@ -963,6 +964,15 @@ fn export_a2l(state: tauri::State<AppState>) -> Result<String, String> {
 }
 
 #[tauri::command]
+fn save_a2l_to_path(path: String, state: tauri::State<AppState>) -> Result<(), String> {
+    let guard = state.a2l.lock().map_err(|_| "State lock poisoned")?;
+    let a2l = guard.as_ref().ok_or("No A2L loaded")?;
+    let content = a2l.write_to_string();
+    fs::write(&path, content).map_err(|e| e.to_string())?;
+    Ok(())
+}
+
+#[tauri::command]
 fn list_core_entities(state: tauri::State<AppState>) -> Result<Vec<CoreEntity>, String> {
     let guard = state.a2l.lock().map_err(|_| "State lock poisoned")?;
     let a2l = guard.as_ref().ok_or("No A2L loaded")?;
@@ -1312,6 +1322,89 @@ fn update_axis_pts(name: String, data: AxisPtsData, state: tauri::State<AppState
     Err(format!("AxisPts '{}' not found", name))
 }
 
+#[derive(Serialize, Deserialize, Clone)]
+struct ElfSymbol {
+    name: String,
+    address: u64,
+    size: u64,
+    bind: String,
+    type_str: String,
+    section: String,
+}
+
+#[tauri::command]
+fn load_elf_symbols(path: String) -> Result<Vec<ElfSymbol>, String> {
+    let buffer = fs::read(&path).map_err(|e| e.to_string())?;
+    let elf = Elf::parse(&buffer).map_err(|e| e.to_string())?;
+    
+    let mut symbols = Vec::new();
+    for sym in elf.syms.iter() {
+        if let Some(name) = elf.strtab.get_at(sym.st_name) {
+            if !name.is_empty() {
+                 let type_str = match goblin::elf::sym::type_to_str(sym.st_type()) {
+                    Some(s) => s.to_string(),
+                    None => format!("TYPE_{}", sym.st_type())
+                 };
+                 let bind = match goblin::elf::sym::bind_to_str(sym.st_bind()) {
+                     Some(s) => s.to_string(),
+                     None => format!("BIND_{}", sym.st_bind())
+                 };
+
+                 let section = if sym.st_shndx < elf.section_headers.len() {
+                    let sh = &elf.section_headers[sym.st_shndx];
+                     elf.shdr_strtab.get_at(sh.sh_name).unwrap_or("").to_string()
+                 } else {
+                    "".to_string()
+                 };
+                 
+                 symbols.push(ElfSymbol {
+                     name: name.to_string(),
+                     address: sym.st_value,
+                     size: sym.st_size,
+                     bind,
+                     type_str,
+                     section,
+                 });
+            }
+        }
+    }
+    symbols.sort_by(|a, b| a.name.cmp(&b.name));
+    Ok(symbols)
+}
+
+#[tauri::command]
+fn create_measurements_from_elf(
+    module_name: Option<String>,
+    symbols: Vec<ElfSymbol>, 
+    state: tauri::State<AppState>
+) -> Result<EntityUpdateResult, String> {
+    let mut guard = state.a2l.lock().map_err(|_| "State lock poisoned")?;
+    let a2l = guard.as_mut().ok_or("No A2L loaded")?;
+
+    let target_module = if let Some(name) = module_name {
+        a2l.project.module.iter_mut().find(|m| m.get_name() == name)
+            .ok_or(format!("Module {} not found", name))?
+    } else {
+        a2l.project.module.first_mut().ok_or("No modules in project")?
+    };
+
+    for sym in symbols {
+        let mut m = a2lfile::Measurement::new(sym.name, a2lfile::DataType::Ubyte);
+        m.ecu_address = Some(a2lfile::EcuAddress::new(sym.address as u32));
+        m.lower_limit = 0.0;
+        m.upper_limit = 255.0; // Default UBYTE limits
+        m.resolution = 1;
+        m.accuracy = 0.0;
+        m.conversion = "NO_COMPU_METHOD".to_string();
+        target_module.measurement.push(m);
+    }
+
+    Ok(EntityUpdateResult {
+        metadata: build_metadata(a2l, 0),
+        entities: collect_core_entities(a2l),
+    })
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -1322,6 +1415,7 @@ pub fn run() {
             load_a2l_from_path,
             update_project_metadata,
             export_a2l,
+            save_a2l_to_path,
             list_core_entities,
             list_a2l_tree,
             update_entity_name,
@@ -1331,7 +1425,9 @@ pub fn run() {
             get_characteristic,
             update_characteristic,
             get_axis_pts,
-            update_axis_pts
+            update_axis_pts,
+            load_elf_symbols,
+            create_measurements_from_elf
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

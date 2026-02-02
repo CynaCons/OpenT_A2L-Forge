@@ -1,6 +1,11 @@
 import fs from "node:fs";
 import path from "node:path";
 import { test, expect } from "@playwright/test";
+import { setupTauriMocks } from "./mocks";
+
+test.beforeEach(async ({ page }) => {
+  await setupTauriMocks(page);
+});
 
 const FIXTURES_DIR = path.resolve("external/a2ltool/fixtures/a2l");
 
@@ -38,14 +43,20 @@ test("load largest A2L fixture without crashing", async ({ page }) => {
     const largest = getLargestA2lFixturePath();
 
     await page.goto("/");
-    await expect(page.getByText("A2L Workspace")).toBeVisible();
+    await expect(page.getByText("EXPLORER")).toBeVisible();
 
     const fileInput = page.locator('input[type="file"][accept=".a2l"]').first();
     await fileInput.setInputFiles(largest.fullPath);
 
-    await expect(page.getByText("A2L loaded and parsed.")).toBeVisible({ timeout: 90_000 });
-    await expect(page.getByText(largest.entry, { exact: true }).first()).toBeVisible();
-    await expect(page.getByText("A2L Contents")).toBeVisible();
+    await expect(page.getByText("Loaded successfully.")).toBeVisible({ timeout: 90_000 });
+    // In the new UI, the filename appears in the status bar and optionally in Recents.
+    // We check status bar for filename presence if updated there, or Recents.
+    // The Status Bar shows: fileName
+    // Sanity check for filename:
+    await expect(page.getByText(largest.entry)).toBeVisible(); 
+    
+    // Check for some tree content
+    await expect(page.getByText("Measurements")).toBeVisible();
   };
 
   try {

@@ -11,7 +11,7 @@ test("layout stays within viewport", async ({ page }) => {
   });
   expect(hasHorizontalOverflow).toBeFalsy();
 
-  await expect(page.getByRole("button", { name: "A2L" })).toBeVisible();
-  await expect(page.getByRole("button", { name: "ELF" })).toBeVisible();
-  await expect(page.getByRole("button", { name: "Settings" })).toBeVisible();
+  await expect(page.getByLabel("Explorer")).toBeVisible();
+  await expect(page.getByLabel("ELF Symbols")).toBeVisible();
+  await expect(page.getByLabel("Settings")).toBeVisible();
 });
