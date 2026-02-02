@@ -1,88 +1,182 @@
-export const mockA2lMetadata = {
-  project_name: "demo_project",
-  project_long_identifier: "Demo Project Long ID",
-  module_names: ["demo_module"],
-  warning_count: 0
+// Types
+export type MockEntity = {
+  name: string;
+  kind: string;
+  description?: string;
+  [key: string]: any;
 };
 
-export const mockA2lTree = {
-  modules: [
-    {
-      id: "demo_module",
-      name: "demo_module",
-      long_identifier: "Demo Module",
-      sections: [
-        {
-            id: "measurement_section",
-            title: "Measurements",
-            items: [
-                { id: "meas_1", name: "Measurement_1", kind: "Measurement", description: "Desc" }
-            ]
-        },
-        {
-            id: "characteristic_section",
-            title: "Characteristics",
-            items: [
-                { id: "char_1", name: "Characteristic_1", kind: "Characteristic", description: "Desc" }
-            ]
+export type MockState = {
+  metadata: {
+    project_name: string;
+    project_long_identifier: string;
+    module_names: string[];
+    warning_count: number;
+  };
+  measurements?: MockEntity[];
+  characteristics?: MockEntity[];
+  axis_pts?: MockEntity[];
+  elf_symbols?: any[];
+};
+
+// This function runs IN THE BROWSER.
+// It cannot close over variables from the test scope.
+// It receives `data` as its argument.
+export const setupTauriMock = (data: { initialState: MockState, persistenceKey?: string }) => {
+    let state = data.initialState;
+    const DISK_KEY = data.persistenceKey;
+
+    if (DISK_KEY) {
+        const stored = localStorage.getItem(DISK_KEY);
+        if (stored) {
+            console.log(`[TauriMock] Restoring state from ${DISK_KEY}`);
+            state = JSON.parse(stored);
         }
-      ]
     }
-  ]
-};
 
-export const setupTauriMocks = async (page: any) => {
-  await page.addInitScript(() => {
-    // Determine which IPC to mock. Modern Tauri v2 uses window.__TAURI_INTERNALS__.invoke or similar but @tauri-apps/api/core might behave differently.
-    // However, usually mocking `window.__TAURI__.invoke` or `window.__TAURI_IPC__` is key.
-    // Actually, @tauri-apps/api/core uses `window.__TAURI_INTERNALS__.invoke`.
-    
-    // We can try to mock the module exports if we were using a bundler for tests, but here we are in the browser.
-    // The easiest way is to mock `window.__TAURI_INTERNALS__` object if we can inspect how `invoke` works.
-    
-    // BUT! Since we are using Vite, the imports in App.tsx are resolved to the actual library code.
-    // The actual library code checks for window.__TAURI_INTERNALS__.
-    
     (window as any).__TAURI_INTERNALS__ = {
       invoke: async (cmd: string, args: any) => {
-        console.log(`[MockTauri] invoke: ${cmd}`, args);
-        if (cmd === "load_a2l_from_string") {
-            return {
-                project_name: "demo_project",
-                project_long_identifier: "Demo Project Long ID",
-                module_names: ["demo_module"],
-                warning_count: 0
-            };
-        }
-        if (cmd === "list_a2l_tree") {
-            return {
-                modules: [
-                    {
-                        id: "demo_module",
-                        name: "demo_module",
-                        long_identifier: "Demo Module",
+        // Reduced latency
+        // await new Promise(r => setTimeout(r, 5));
+        console.log(`[TauriMock] ${cmd}`, args);
+
+        const persist = () => {
+            if (DISK_KEY) {
+                localStorage.setItem(DISK_KEY, JSON.stringify(state));
+            }
+        };
+
+        switch (cmd) {
+            case "load_a2l_from_string":
+            case "load_a2l_from_path":
+                // If loading from disk, we might want to reload state? 
+                // For simplified mock, we assume 'load' just returns current metadata
+                return state.metadata;
+
+            case "list_a2l_tree":
+                return {
+                    modules: [{
+                        id: state.metadata.module_names[0] || "mod1",
+                        name: state.metadata.module_names[0] || "mod1",
+                        long_identifier: state.metadata.project_long_identifier,
                         sections: [
                             {
                                 id: "measurement_section",
                                 title: "Measurements",
-                                items: [
-                                    { id: "meas_1", name: "Measurement_1", kind: "Measurement", description: "Desc" }
-                                ]
+                                items: (state.measurements || []).map((m: any) => ({
+                                    id: m.name,
+                                    name: m.name,
+                                    kind: "Measurement",
+                                    description: m.long_identifier,
+                                    details: [
+                                        { label: "Limits", value: `${m.lower_limit} .. ${m.upper_limit}` },
+                                        { label: "Datatype", value: m.datatype }
+                                    ]
+                                }))
                             },
-                            {
+                             {
                                 id: "characteristic_section",
                                 title: "Characteristics",
-                                items: [
-                                    { id: "char_1", name: "Characteristic_1", kind: "Characteristic", description: "Desc" }
-                                ]
+                                items: (state.characteristics || []).map((c: any) => ({
+                                    id: c.name,
+                                    name: c.name,
+                                    kind: "Characteristic",
+                                    description: c.long_identifier,
+                                    details: [
+                                        { label: "Address", value: c.address },
+                                        { label: "Type", value: c.characteristic_type }
+                                    ]
+                                }))
+                            },
+                            {
+                                id: "axis_pts_section",
+                                title: "Axis Points",
+                                items: (state.axis_pts || []).map((a: any) => ({
+                                    id: a.name,
+                                    name: a.name,
+                                    kind: "AxisPts",
+                                    description: a.long_identifier,
+                                    details: [
+                                        { label: "Input quantity", value: a.input_quantity },
+                                        { label: "Max axis points", value: `${a.max_axis_points}` }
+                                    ]
+                                }))
                             }
                         ]
-                    }
-                ]
-            };
+                    }]
+                };
+
+            // Entity Getters
+            case "get_measurement":
+                return (state.measurements || []).find((m: any) => m.name === args.name);
+            case "get_characteristic":
+                return (state.characteristics || []).find((c: any) => c.name === args.name);
+            case "get_axis_pts":
+                return (state.axis_pts || []).find((a: any) => a.name === args.name);
+
+            // Entity Updates
+            case "update_measurement": {
+                if (!state.measurements) state.measurements = [];
+                const idx = state.measurements.findIndex((m: any) => m.name === args.name);
+                if (idx !== -1) {
+                    state.measurements[idx] = { ...state.measurements[idx], ...args.data };
+                    persist();
+                }
+                return;
+            }
+            case "update_characteristic": {
+                if (!state.characteristics) state.characteristics = [];
+                const idx = state.characteristics.findIndex((c: any) => c.name === args.name);
+                if (idx !== -1) {
+                    state.characteristics[idx] = { ...state.characteristics[idx], ...args.data };
+                    persist();
+                }
+                return;
+            }
+            case "update_axis_pts": {
+                if (!state.axis_pts) state.axis_pts = [];
+                const idx = state.axis_pts.findIndex((a: any) => a.name === args.name);
+                if (idx !== -1) {
+                    state.axis_pts[idx] = { ...state.axis_pts[idx], ...args.data };
+                    persist();
+                }
+                return;
+            }
+
+            // ELF
+             case "load_elf_symbols":
+                return state.elf_symbols || [];
+            
+            case "create_measurements_from_elf": {
+                const { symbols } = args;
+                const newMeas = symbols.map((s: any) => ({
+                    name: s.name,
+                    kind: "Measurement",
+                    long_identifier: "",
+                    datatype: "UBYTE",
+                    ecu_address: typeof s.address === 'number' ? `0x${s.address.toString(16).toUpperCase()}` : s.address, // Fix address formatting if needed
+                    lower_limit: 0,
+                    upper_limit: 255,
+                    conversion: "NO_COMPU_METHOD",
+                    resolution: 1,
+                    accuracy: 0
+                }));
+                if (!state.measurements) state.measurements = [];
+                state.measurements.push(...newMeas);
+                persist();
+                return {
+                    metadata: state.metadata,
+                    entities: []
+                };
+            }
+
+            case "save_a2l_to_path":
+                persist();
+                return;
         }
-        return {};
+        
+        console.warn(`[TauriMock] Unhandled command: ${cmd}`);
+        return null;
       }
     };
-  });
 };
