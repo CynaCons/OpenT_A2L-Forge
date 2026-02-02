@@ -1,5 +1,7 @@
 # PLAN — OpenT_A2L-Forge
 
+**Last updated:** 2026-02-02
+
 ## Iteration 0 — Foundations
 - [x] Repo scaffolding, build, and CI basics
   - [x] Tauri + React + TypeScript app skeleton builds locally
