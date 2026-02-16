@@ -1406,14 +1406,9 @@ fn load_elf_symbols(path: String) -> Result<Vec<ElfSymbol>, String> {
     for sym in elf.syms.iter() {
         if let Some(name) = elf.strtab.get_at(sym.st_name) {
             if !name.is_empty() {
-                 let type_str = match goblin::elf::sym::type_to_str(sym.st_type()) {
-                    Some(s) => s.to_string(),
-                    None => format!("TYPE_{}", sym.st_type())
-                 };
-                 let bind = match goblin::elf::sym::bind_to_str(sym.st_bind()) {
-                     Some(s) => s.to_string(),
-                     None => format!("BIND_{}", sym.st_bind())
-                 };
+                 // goblin 0.8+ returns &str directly, not Option
+                 let type_str = goblin::elf::sym::type_to_str(sym.st_type()).to_string();
+                 let bind = goblin::elf::sym::bind_to_str(sym.st_bind()).to_string();
 
                  let section = if sym.st_shndx < elf.section_headers.len() {
                     let sh = &elf.section_headers[sym.st_shndx];
@@ -1451,7 +1446,7 @@ struct SymbolWithMapping {
     lower_limit: f64,
     upper_limit: f64,
     conversion: Option<String>,
-    resolution: Option<i64>,
+    resolution: Option<u16>,
     accuracy: Option<f64>,
 }
 
@@ -1532,7 +1527,7 @@ fn check_symbol_conflicts(
     let mut non_conflicts = Vec::new();
 
     for sym in symbols {
-        if let Some(existing) = target_module.measurement.iter().find(|m| m.name == sym.name) {
+        if let Some(existing) = target_module.measurement.iter().find(|m| m.get_name() == sym.name) {
             conflicts.push(SymbolConflict {
                 symbol_name: sym.name.clone(),
                 existing_address: format!("0x{:X}",
@@ -1563,18 +1558,22 @@ fn create_measurements_with_mapping(
         a2l.project.module.iter_mut().find(|m| m.get_name() == name)
             .ok_or(format!("Module {} not found", name))?
     } else {
-        a2l.project.module.first_mut().ok_or("No modules in project")?
+        a2l.project.module.get_mut(0).ok_or("No modules in project")?
     };
 
     for sym in symbols {
         let data_type = parse_data_type(&sym.a2l_type);
-        let mut m = a2lfile::Measurement::new(sym.name, data_type);
+        let mut m = a2lfile::Measurement::new(
+            sym.name.clone(),
+            String::new(), // long_identifier
+            data_type,
+            sym.conversion.unwrap_or_else(|| "NO_COMPU_METHOD".to_string()),
+            sym.resolution.unwrap_or(1),
+            sym.accuracy.unwrap_or(0.0),
+            sym.lower_limit,
+            sym.upper_limit,
+        );
         m.ecu_address = Some(a2lfile::EcuAddress::new(sym.address as u32));
-        m.lower_limit = sym.lower_limit;
-        m.upper_limit = sym.upper_limit;
-        m.resolution = sym.resolution.unwrap_or(1);
-        m.accuracy = sym.accuracy.unwrap_or(0.0);
-        m.conversion = sym.conversion.unwrap_or_else(|| "NO_COMPU_METHOD".to_string());
         target_module.measurement.push(m);
     }
 
