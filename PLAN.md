@@ -75,11 +75,20 @@
   - [x] Display symbol table and types
   - [x] Product owner demo: import ELF and browse symbols
   - [x] E2E: import ELF → list symbols
-- [x] D2: Symbol-to-A2L mapping
+- [x] D2: Symbol-to-A2L mapping (Basic)
   - [x] Map variables to MEASUREMENT/CHARACTERISTIC
   - [x] Address resolution and name normalization
   - [x] Product owner demo: map symbols to A2L
   - [x] E2E: import ELF → map → save
+- [ ] D2.5: Enhanced Symbol Mapping (See PLAN_ELF_ENHANCEMENT.md)
+  - [ ] Symbol search and filtering (by type, section, name)
+  - [ ] Smart data type inference from symbol size
+  - [ ] Conflict detection and resolution
+  - [ ] Preview dialog with batch configuration
+  - [ ] Module selection for multi-module projects
+  - [ ] Address overflow validation
+  - [ ] Product owner demo: filtered import with preview
+  - [ ] E2E: filter → preview → resolve conflicts → import
 - [ ] D3: Struct-based generation (Deferred to Iteration 6)
   - [ ] Generate entries from struct layouts
   - [ ] Conflict handling UI
