@@ -22,9 +22,10 @@ export type MockState = {
 // This function runs IN THE BROWSER.
 // It cannot close over variables from the test scope.
 // It receives `data` as its argument.
-export const setupTauriMock = (data: { initialState: MockState, persistenceKey?: string }) => {
+export const setupTauriMock = (data: { initialState: MockState, persistenceKey?: string, elfFilePath?: string }) => {
     let state = data.initialState;
     const DISK_KEY = data.persistenceKey;
+    const ELF_FILE_PATH = data.elfFilePath || "C:\\test\\sample.elf";
 
     if (DISK_KEY) {
         const stored = localStorage.getItem(DISK_KEY);
@@ -33,6 +34,15 @@ export const setupTauriMock = (data: { initialState: MockState, persistenceKey?:
             state = JSON.parse(stored);
         }
     }
+
+    // Mock dialog plugin
+    (window as any).__TAURI_INVOKE__ = async (cmd: string, args: any) => {
+        if (cmd === "plugin:dialog|open") {
+            // Return the mocked ELF file path when dialog is opened
+            return ELF_FILE_PATH;
+        }
+        throw new Error(`Unknown Tauri plugin command: ${cmd}`);
+    };
 
     (window as any).__TAURI_INTERNALS__ = {
       invoke: async (cmd: string, args: any) => {
@@ -145,9 +155,6 @@ export const setupTauriMock = (data: { initialState: MockState, persistenceKey?:
 
             // ELF
              case "load_elf_symbols":
-                return state.elf_symbols || [];
-
-            case "load_elf_symbols_from_bytes":
                 return state.elf_symbols || [];
 
             case "create_measurements_from_elf": {

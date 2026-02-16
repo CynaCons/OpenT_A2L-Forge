@@ -1332,8 +1332,10 @@ struct ElfSymbol {
     section: String,
 }
 
-fn parse_elf_symbols_from_buffer(buffer: &[u8]) -> Result<Vec<ElfSymbol>, String> {
-    let elf = Elf::parse(buffer).map_err(|e| e.to_string())?;
+#[tauri::command]
+fn load_elf_symbols(path: String) -> Result<Vec<ElfSymbol>, String> {
+    let buffer = fs::read(&path).map_err(|e| e.to_string())?;
+    let elf = Elf::parse(&buffer).map_err(|e| e.to_string())?;
 
     let mut symbols = Vec::new();
     for sym in elf.syms.iter() {
@@ -1368,17 +1370,6 @@ fn parse_elf_symbols_from_buffer(buffer: &[u8]) -> Result<Vec<ElfSymbol>, String
     }
     symbols.sort_by(|a, b| a.name.cmp(&b.name));
     Ok(symbols)
-}
-
-#[tauri::command]
-fn load_elf_symbols(path: String) -> Result<Vec<ElfSymbol>, String> {
-    let buffer = fs::read(&path).map_err(|e| e.to_string())?;
-    parse_elf_symbols_from_buffer(&buffer)
-}
-
-#[tauri::command]
-fn load_elf_symbols_from_bytes(buffer: Vec<u8>) -> Result<Vec<ElfSymbol>, String> {
-    parse_elf_symbols_from_buffer(&buffer)
 }
 
 #[tauri::command]
@@ -1419,6 +1410,7 @@ pub fn run() {
     tauri::Builder::default()
         .manage(AppState::default())
         .plugin(tauri_plugin_opener::init())
+        .plugin(tauri_plugin_dialog::init())
         .invoke_handler(tauri::generate_handler![
             load_a2l_from_string,
             load_a2l_from_path,
@@ -1436,7 +1428,6 @@ pub fn run() {
             get_axis_pts,
             update_axis_pts,
             load_elf_symbols,
-            load_elf_symbols_from_bytes,
             create_measurements_from_elf
         ])
         .run(tauri::generate_context!())

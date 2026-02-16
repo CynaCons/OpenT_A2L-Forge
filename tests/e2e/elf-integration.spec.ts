@@ -31,9 +31,13 @@ test("End-to-end: Load A2L, Load ELF, Add Variable, Save, Reload, Verify", async
     };
 
     // Install Mock (pass serialized args)
-    await page.addInitScript(setupTauriMock, { initialState: INITIAL_STATE, persistenceKey: DISK_KEY });
-    
-    // Shim File.path
+    await page.addInitScript(setupTauriMock, {
+        initialState: INITIAL_STATE,
+        persistenceKey: DISK_KEY,
+        elfFilePath: "C:\\test\\sample.elf"
+    });
+
+    // Shim File.path for A2L file loading
     await page.addInitScript(() => {
         Object.defineProperty(File.prototype, "path", {
             get() { return this._path || "c:\\fake\\path\\" + this.name; },
@@ -57,12 +61,8 @@ test("End-to-end: Load A2L, Load ELF, Add Variable, Save, Reload, Verify", async
     await page.getByLabel("ELF Symbols").click();
     await expect(page.getByText("ELF INSPECTOR")).toBeVisible();
 
-    // 4. Load ELF File
-    await page.setInputFiles('input[type="file"]:not([accept=".a2l"])', {
-        name: "software_b.elf",
-        mimeType: "application/octet-stream",
-        buffer: Buffer.from("dummy_elf")
-    });
+    // 4. Load ELF File via native dialog (mocked)
+    await page.getByRole("button", { name: "Load ELF Binary" }).click();
 
     // 5. Verify Symbols
     await expect(page.getByRole("cell", { name: "New_Variable_A", exact: true })).toBeVisible();

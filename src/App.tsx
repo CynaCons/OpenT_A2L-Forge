@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState, type Dispatch, type SetStateAction } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { getCurrentWindow } from "@tauri-apps/api/window";
+import { open } from "@tauri-apps/plugin-dialog";
 import {
   Box,
   Button,
@@ -502,39 +503,37 @@ function App() {
   };
   const handleClose = () => getCurrentWindow().close().catch(() => {});
 
-  async function handleLoadElf(fileInput: File | { name: string; path?: string | null } | undefined) {
-      if (!fileInput) return;
+  async function handleOpenElfDialog() {
+      const filePath = await open({
+          title: "Select ELF Binary",
+          multiple: false,
+          filters: [
+              { name: "ELF Binary", extensions: ["elf", "out", "bin", "axf"] },
+              { name: "All Files", extensions: ["*"] }
+          ]
+      });
+
+      if (filePath) {
+          await handleLoadElfFromPath(filePath as string);
+      }
+  }
+
+  async function handleLoadElfFromPath(filePath: string) {
       setIsBusy(true);
       pushStatus("info", "Loading ELF symbols...", false);
 
-      // Check if it's a real File object (has arrayBuffer method)
-      const isRealFile = "arrayBuffer" in fileInput && typeof (fileInput as any).arrayBuffer === "function";
-      const filePath = (fileInput as any).path;
-      setElfFileName(fileInput.name);
+      const fileName = filePath.split(/[\\/]/).pop() || filePath;
+      setElfFileName(fileName);
 
       try {
-          let symbols: ElfSymbol[];
-
-          // Use arrayBuffer() for dropped/selected files, invoke path for recents/files with path on disk
-          if (isRealFile) {
-              const arrayBuffer = await (fileInput as File).arrayBuffer();
-              const buffer = Array.from(new Uint8Array(arrayBuffer));
-              symbols = await invoke<ElfSymbol[]>("load_elf_symbols_from_bytes", { buffer });
-          } else if (filePath) {
-              symbols = await invoke<ElfSymbol[]>("load_elf_symbols", { path: filePath });
-          } else {
-              throw new Error("Cannot load file: missing path or content source.");
-          }
-
+          const symbols = await invoke<ElfSymbol[]>("load_elf_symbols", { path: filePath });
           setElfSymbols(symbols);
           setSelectedElfSymbols(new Set());
 
-          // Add to recents (only if we have a path)
-          if (filePath) {
-              addRecentFile(RECENT_ELF_KEY, recentElfFiles, setRecentElfFiles, {
-                 name: fileInput.name, path: filePath, lastOpened: Date.now()
-              });
-          }
+          // Add to recents
+          addRecentFile(RECENT_ELF_KEY, recentElfFiles, setRecentElfFiles, {
+             name: fileName, path: filePath, lastOpened: Date.now()
+          });
 
           pushStatus("success", `Loaded ${symbols.length} symbols.`);
       } catch (e) {
@@ -774,9 +773,8 @@ function App() {
             <Box sx={{ p: 2 }}>
                 <Typography variant="overline">ELF INSPECTOR</Typography>
                 <Divider sx={{ my: 2 }} />
-                <Button variant="outlined" component="label" fullWidth startIcon={<FolderOpenIcon />}>
+                <Button variant="outlined" fullWidth startIcon={<FolderOpenIcon />} onClick={handleOpenElfDialog}>
                     Load ELF Binary
-                    <input type="file" hidden onChange={(e) => handleLoadElf(e.target.files![0])} />
                 </Button>
 
                 {recentElfFiles.length > 0 && (
@@ -785,7 +783,7 @@ function App() {
                          <List dense>
                             {recentElfFiles.map(file => (
                                 <ListItemButton key={file.name + file.lastOpened} onClick={() => {
-                                    handleLoadElf({ name: file.name, path: file.path } as any)
+                                    if (file.path) handleLoadElfFromPath(file.path)
                                 }}>
                                     <ListItemIcon sx={{ minWidth: 32 }}><MemoryIcon fontSize="small" sx={{ fontSize: 16 }} /></ListItemIcon>
                                     <ListItemText primary={file.name} secondary={file.path} primaryTypographyProps={{noWrap:true, fontSize: 12}} secondaryTypographyProps={{noWrap:true, fontSize: 10}} />
@@ -869,7 +867,7 @@ function App() {
                                           </TableCell>
                                           <TableCell sx={{ fontFamily: "monospace" }}>{row.name}</TableCell>
                                           <TableCell sx={{ fontFamily: "monospace", color: "#4ec9b0" }}>0x{row.address.toString(16).toUpperCase()}</TableCell>
-                                          <TableCell>{row.size}</TableCell>
+                                          <TableCell sx={{ fontFamily: "monospace", color: "#4ec9b0" }}>0x{row.size.toString(16).toUpperCase()}</TableCell>
                                           <TableCell><Chip label={row.type_str} size="small" variant="outlined" sx={{ height: 16, fontSize: 10 }} /></TableCell>
                                           <TableCell sx={{ color: "#888" }}>{row.section}</TableCell>
                                       </TableRow>
