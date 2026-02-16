@@ -154,8 +154,32 @@ export const setupTauriMock = (data: { initialState: MockState, persistenceKey?:
             }
 
             // ELF
-             case "load_elf_symbols":
-                return state.elf_symbols || [];
+             case "load_elf_symbols": {
+                // Enhance symbols with suggested types
+                const symbols = (state.elf_symbols || []).map((s: any) => {
+                    let suggested_a2l_type = "UBYTE";
+                    let suggested_limits: [number, number] = [0, 255];
+
+                    if (s.size === 2) {
+                        suggested_a2l_type = "UWORD";
+                        suggested_limits = [0, 65535];
+                    } else if (s.size === 4) {
+                        suggested_a2l_type = "ULONG";
+                        suggested_limits = [0, 4294967295];
+                    } else if (s.size === 8) {
+                        suggested_a2l_type = "A_UINT64";
+                        suggested_limits = [0, 18446744073709551615];
+                    }
+
+                    return {
+                        ...s,
+                        suggested_a2l_type,
+                        suggested_limits,
+                        address_warning: s.address > 0xFFFFFFFF ? "Address exceeds 32-bit range" : null
+                    };
+                });
+                return symbols;
+             }
 
             case "create_measurements_from_elf": {
                 const { symbols } = args;
@@ -163,10 +187,10 @@ export const setupTauriMock = (data: { initialState: MockState, persistenceKey?:
                     name: s.name,
                     kind: "Measurement",
                     long_identifier: "",
-                    datatype: "UBYTE",
-                    ecu_address: typeof s.address === 'number' ? `0x${s.address.toString(16).toUpperCase()}` : s.address, // Fix address formatting if needed
-                    lower_limit: 0,
-                    upper_limit: 255,
+                    datatype: s.suggested_a2l_type || "UBYTE",
+                    ecu_address: typeof s.address === 'number' ? `0x${s.address.toString(16).toUpperCase()}` : s.address,
+                    lower_limit: s.suggested_limits ? s.suggested_limits[0] : 0,
+                    upper_limit: s.suggested_limits ? s.suggested_limits[1] : 255,
                     conversion: "NO_COMPU_METHOD",
                     resolution: 1,
                     accuracy: 0
@@ -178,6 +202,52 @@ export const setupTauriMock = (data: { initialState: MockState, persistenceKey?:
                     metadata: state.metadata,
                     entities: []
                 };
+            }
+
+            case "create_measurements_with_mapping": {
+                const { symbols } = args;
+                const newMeas = symbols.map((s: any) => ({
+                    name: s.name,
+                    kind: "Measurement",
+                    long_identifier: "",
+                    datatype: s.a2l_type,
+                    ecu_address: typeof s.address === 'number' ? `0x${s.address.toString(16).toUpperCase()}` : s.address,
+                    lower_limit: s.lower_limit,
+                    upper_limit: s.upper_limit,
+                    conversion: s.conversion || "NO_COMPU_METHOD",
+                    resolution: s.resolution || 1,
+                    accuracy: s.accuracy || 0
+                }));
+                if (!state.measurements) state.measurements = [];
+                state.measurements.push(...newMeas);
+                persist();
+                return {
+                    metadata: state.metadata,
+                    entities: []
+                };
+            }
+
+            case "check_symbol_conflicts": {
+                const { symbols } = args;
+                const conflicts: any[] = [];
+                const non_conflicts: string[] = [];
+
+                symbols.forEach((sym: any) => {
+                    const existing = (state.measurements || []).find((m: any) => m.name === sym.name);
+                    if (existing) {
+                        conflicts.push({
+                            symbol_name: sym.name,
+                            existing_address: existing.ecu_address,
+                            existing_type: existing.datatype,
+                            new_address: `0x${sym.address.toString(16).toUpperCase()}`,
+                            new_type: sym.a2l_type
+                        });
+                    } else {
+                        non_conflicts.push(sym.name);
+                    }
+                });
+
+                return { conflicts, non_conflicts };
             }
 
             case "save_a2l_to_path":

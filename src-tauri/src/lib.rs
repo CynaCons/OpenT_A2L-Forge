@@ -1330,6 +1330,71 @@ struct ElfSymbol {
     bind: String,
     type_str: String,
     section: String,
+    suggested_a2l_type: String,
+    suggested_limits: (f64, f64),
+    address_warning: Option<String>,
+}
+
+// Type inference based on symbol size and name heuristics
+fn infer_a2l_type(symbol_name: &str, symbol_size: u64) -> (String, f64, f64) {
+    let name_lower = symbol_name.to_lowercase();
+
+    match symbol_size {
+        1 => {
+            // 1 byte: SBYTE or UBYTE
+            if name_lower.contains("signed") || name_lower.contains("int8") || name_lower.contains("sbyte") {
+                ("SBYTE".to_string(), -128.0, 127.0)
+            } else {
+                ("UBYTE".to_string(), 0.0, 255.0)
+            }
+        },
+        2 => {
+            // 2 bytes: SWORD or UWORD
+            if name_lower.contains("signed") || name_lower.contains("int16") || name_lower.contains("sword") {
+                ("SWORD".to_string(), -32768.0, 32767.0)
+            } else {
+                ("UWORD".to_string(), 0.0, 65535.0)
+            }
+        },
+        4 => {
+            // 4 bytes: FLOAT32, SLONG, or ULONG
+            if name_lower.contains("float") || name_lower.contains("flt") || name_lower.contains("f32") {
+                ("FLOAT32_IEEE".to_string(), -3.4e38, 3.4e38)
+            } else if name_lower.contains("signed") || name_lower.contains("int32") || name_lower.contains("slong")
+                      || name_lower.contains("i32") {
+                ("SLONG".to_string(), -2147483648.0, 2147483647.0)
+            } else {
+                ("ULONG".to_string(), 0.0, 4294967295.0)
+            }
+        },
+        8 => {
+            // 8 bytes: FLOAT64, A_INT64, or A_UINT64
+            if name_lower.contains("double") || name_lower.contains("dbl") || name_lower.contains("f64") {
+                ("FLOAT64_IEEE".to_string(), -1.7e308, 1.7e308)
+            } else if name_lower.contains("signed") || name_lower.contains("int64") || name_lower.contains("i64") {
+                ("A_INT64".to_string(), -9223372036854775808.0, 9223372036854775807.0)
+            } else {
+                ("A_UINT64".to_string(), 0.0, 18446744073709551615.0)
+            }
+        },
+        _ => {
+            // Fallback for unusual sizes
+            ("UBYTE".to_string(), 0.0, 255.0)
+        }
+    }
+}
+
+// Validate address range (u64 to u32 conversion)
+fn validate_address(address: u64) -> Option<String> {
+    if address > 0xFFFFFFFF {
+        Some(format!(
+            "Address 0x{:X} exceeds 32-bit range, will be truncated to 0x{:X}",
+            address,
+            address as u32
+        ))
+    } else {
+        None
+    }
 }
 
 #[tauri::command]
@@ -1357,6 +1422,9 @@ fn load_elf_symbols(path: String) -> Result<Vec<ElfSymbol>, String> {
                     "".to_string()
                  };
 
+                 let (suggested_type, min_limit, max_limit) = infer_a2l_type(name, sym.st_size);
+                 let addr_warning = validate_address(sym.st_value);
+
                  symbols.push(ElfSymbol {
                      name: name.to_string(),
                      address: sym.st_value,
@@ -1364,6 +1432,9 @@ fn load_elf_symbols(path: String) -> Result<Vec<ElfSymbol>, String> {
                      bind,
                      type_str,
                      section,
+                     suggested_a2l_type: suggested_type,
+                     suggested_limits: (min_limit, max_limit),
+                     address_warning: addr_warning,
                  });
             }
         }
@@ -1372,10 +1443,117 @@ fn load_elf_symbols(path: String) -> Result<Vec<ElfSymbol>, String> {
     Ok(symbols)
 }
 
+#[derive(Serialize, Deserialize)]
+struct SymbolWithMapping {
+    name: String,
+    address: u64,
+    a2l_type: String,
+    lower_limit: f64,
+    upper_limit: f64,
+    conversion: Option<String>,
+    resolution: Option<i64>,
+    accuracy: Option<f64>,
+}
+
+// Helper to parse A2L data type from string
+fn parse_data_type(type_str: &str) -> a2lfile::DataType {
+    match type_str {
+        "UBYTE" => a2lfile::DataType::Ubyte,
+        "SBYTE" => a2lfile::DataType::Sbyte,
+        "UWORD" => a2lfile::DataType::Uword,
+        "SWORD" => a2lfile::DataType::Sword,
+        "ULONG" => a2lfile::DataType::Ulong,
+        "SLONG" => a2lfile::DataType::Slong,
+        "A_UINT64" => a2lfile::DataType::AUint64,
+        "A_INT64" => a2lfile::DataType::AInt64,
+        "FLOAT32_IEEE" => a2lfile::DataType::Float32Ieee,
+        "FLOAT64_IEEE" => a2lfile::DataType::Float64Ieee,
+        _ => a2lfile::DataType::Ubyte, // Fallback
+    }
+}
+
+// Legacy command for backward compatibility
 #[tauri::command]
 fn create_measurements_from_elf(
     module_name: Option<String>,
-    symbols: Vec<ElfSymbol>, 
+    symbols: Vec<ElfSymbol>,
+    state: tauri::State<AppState>
+) -> Result<EntityUpdateResult, String> {
+    // Convert to SymbolWithMapping with default values
+    let mapped_symbols: Vec<SymbolWithMapping> = symbols.iter().map(|s| {
+        SymbolWithMapping {
+            name: s.name.clone(),
+            address: s.address,
+            a2l_type: s.suggested_a2l_type.clone(),
+            lower_limit: s.suggested_limits.0,
+            upper_limit: s.suggested_limits.1,
+            conversion: Some("NO_COMPU_METHOD".to_string()),
+            resolution: Some(1),
+            accuracy: Some(0.0),
+        }
+    }).collect();
+
+    create_measurements_with_mapping(module_name, mapped_symbols, state)
+}
+
+#[derive(Serialize, Deserialize)]
+struct SymbolConflict {
+    symbol_name: String,
+    existing_address: String,
+    existing_type: String,
+    new_address: String,
+    new_type: String,
+}
+
+#[derive(Serialize, Deserialize)]
+struct ConflictReport {
+    conflicts: Vec<SymbolConflict>,
+    non_conflicts: Vec<String>,
+}
+
+// Check for symbol conflicts before importing
+#[tauri::command]
+fn check_symbol_conflicts(
+    module_name: Option<String>,
+    symbols: Vec<SymbolWithMapping>,
+    state: tauri::State<AppState>
+) -> Result<ConflictReport, String> {
+    let guard = state.a2l.lock().map_err(|_| "State lock poisoned")?;
+    let a2l = guard.as_ref().ok_or("No A2L loaded")?;
+
+    let target_module = if let Some(name) = &module_name {
+        a2l.project.module.iter().find(|m| m.get_name() == name)
+            .ok_or(format!("Module {} not found", name))?
+    } else {
+        a2l.project.module.first().ok_or("No modules in project")?
+    };
+
+    let mut conflicts = Vec::new();
+    let mut non_conflicts = Vec::new();
+
+    for sym in symbols {
+        if let Some(existing) = target_module.measurement.iter().find(|m| m.name == sym.name) {
+            conflicts.push(SymbolConflict {
+                symbol_name: sym.name.clone(),
+                existing_address: format!("0x{:X}",
+                    existing.ecu_address.as_ref().map(|a| a.address).unwrap_or(0)),
+                existing_type: format!("{:?}", existing.datatype),
+                new_address: format!("0x{:X}", sym.address as u32),
+                new_type: sym.a2l_type.clone(),
+            });
+        } else {
+            non_conflicts.push(sym.name.clone());
+        }
+    }
+
+    Ok(ConflictReport { conflicts, non_conflicts })
+}
+
+// Enhanced command with custom type mapping
+#[tauri::command]
+fn create_measurements_with_mapping(
+    module_name: Option<String>,
+    symbols: Vec<SymbolWithMapping>,
     state: tauri::State<AppState>
 ) -> Result<EntityUpdateResult, String> {
     let mut guard = state.a2l.lock().map_err(|_| "State lock poisoned")?;
@@ -1389,13 +1567,14 @@ fn create_measurements_from_elf(
     };
 
     for sym in symbols {
-        let mut m = a2lfile::Measurement::new(sym.name, a2lfile::DataType::Ubyte);
+        let data_type = parse_data_type(&sym.a2l_type);
+        let mut m = a2lfile::Measurement::new(sym.name, data_type);
         m.ecu_address = Some(a2lfile::EcuAddress::new(sym.address as u32));
-        m.lower_limit = 0.0;
-        m.upper_limit = 255.0; // Default UBYTE limits
-        m.resolution = 1;
-        m.accuracy = 0.0;
-        m.conversion = "NO_COMPU_METHOD".to_string();
+        m.lower_limit = sym.lower_limit;
+        m.upper_limit = sym.upper_limit;
+        m.resolution = sym.resolution.unwrap_or(1);
+        m.accuracy = sym.accuracy.unwrap_or(0.0);
+        m.conversion = sym.conversion.unwrap_or_else(|| "NO_COMPU_METHOD".to_string());
         target_module.measurement.push(m);
     }
 
@@ -1428,7 +1607,9 @@ pub fn run() {
             get_axis_pts,
             update_axis_pts,
             load_elf_symbols,
-            create_measurements_from_elf
+            create_measurements_from_elf,
+            create_measurements_with_mapping,
+            check_symbol_conflicts
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

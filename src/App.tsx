@@ -29,6 +29,13 @@ import {
   TableHead,
   TableRow,
   Checkbox,
+  Dialog,
+  DialogTitle,
+  DialogContent,
+  DialogActions,
+  Alert,
+  TextField,
+  MenuItem,
 } from "@mui/material";
 import { SimpleTreeView, TreeItem } from "@mui/x-tree-view";
 import {
@@ -127,6 +134,33 @@ type ElfSymbol = {
   bind: string;
   type_str: string;
   section: string;
+  suggested_a2l_type: string;
+  suggested_limits: [number, number];
+  address_warning: string | null;
+};
+
+type SymbolWithMapping = {
+  name: string;
+  address: number;
+  a2l_type: string;
+  lower_limit: number;
+  upper_limit: number;
+  conversion?: string;
+  resolution?: number;
+  accuracy?: number;
+};
+
+type SymbolConflict = {
+  symbol_name: string;
+  existing_address: string;
+  existing_type: string;
+  new_address: string;
+  new_type: string;
+};
+
+type ConflictReport = {
+  conflicts: SymbolConflict[];
+  non_conflicts: string[];
 };
 
 // --- Theme ---
@@ -264,6 +298,17 @@ function App() {
   const [isEditing, setIsEditing] = useState(false);
   const [elfSymbols, setElfSymbols] = useState<ElfSymbol[]>([]);
   const [selectedElfSymbols, setSelectedElfSymbols] = useState<Set<string>>(new Set());
+  const [elfSearchQuery, setElfSearchQuery] = useState('');
+  const [elfFilterTypes, setElfFilterTypes] = useState<Set<string>>(new Set());
+  const [elfFilterSections, setElfFilterSections] = useState<Set<string>>(new Set());
+  const [elfFilterBinds, setElfFilterBinds] = useState<Set<string>>(new Set());
+  const [elfSortColumn, setElfSortColumn] = useState<'name' | 'address' | 'size' | 'type'>('name');
+  const [elfSortDirection, setElfSortDirection] = useState<'asc' | 'desc'>('asc');
+  const [selectedModule, setSelectedModule] = useState<string | null>(null);
+  const [showConflictDialog, setShowConflictDialog] = useState(false);
+  const [conflictReport, setConflictReport] = useState<ConflictReport | null>(null);
+  const [showPreviewDialog, setShowPreviewDialog] = useState(false);
+  const [previewMeasurements, setPreviewMeasurements] = useState<SymbolWithMapping[]>([]);
   const statusTimeoutRef = useRef<number | null>(null);
 
   const refreshTree = async () => {
@@ -301,6 +346,64 @@ function App() {
         .filter(Boolean) as A2lTreeModule[],
     } as A2lTree;
   }, [a2lTree, searchQuery]);
+
+  // Filtered and sorted ELF symbols
+  const filteredElfSymbols = useMemo(() => {
+    let result = [...elfSymbols];
+
+    // Apply search filter
+    if (elfSearchQuery.trim()) {
+      const query = elfSearchQuery.toLowerCase();
+      result = result.filter(s => s.name.toLowerCase().includes(query));
+    }
+
+    // Apply type filter
+    if (elfFilterTypes.size > 0) {
+      result = result.filter(s => elfFilterTypes.has(s.type_str));
+    }
+
+    // Apply section filter
+    if (elfFilterSections.size > 0) {
+      result = result.filter(s => elfFilterSections.has(s.section));
+    }
+
+    // Apply bind filter
+    if (elfFilterBinds.size > 0) {
+      result = result.filter(s => elfFilterBinds.has(s.bind));
+    }
+
+    // Apply sorting
+    result.sort((a, b) => {
+      let comparison = 0;
+      switch (elfSortColumn) {
+        case 'name':
+          comparison = a.name.localeCompare(b.name);
+          break;
+        case 'address':
+          comparison = a.address - b.address;
+          break;
+        case 'size':
+          comparison = a.size - b.size;
+          break;
+        case 'type':
+          comparison = a.type_str.localeCompare(b.type_str);
+          break;
+      }
+      return elfSortDirection === 'asc' ? comparison : -comparison;
+    });
+
+    return result;
+  }, [elfSymbols, elfSearchQuery, elfFilterTypes, elfFilterSections, elfFilterBinds, elfSortColumn, elfSortDirection]);
+
+  // Get unique values for filter dropdowns
+  const elfTypeOptions = useMemo(() => [...new Set(elfSymbols.map(s => s.type_str))].sort(), [elfSymbols]);
+  const elfSectionOptions = useMemo(() => [...new Set(elfSymbols.map(s => s.section))].filter(s => s).sort(), [elfSymbols]);
+  const elfBindOptions = useMemo(() => [...new Set(elfSymbols.map(s => s.bind))].sort(), [elfSymbols]);
+
+  // Count address overflow warnings
+  const addressOverflowCount = useMemo(() =>
+    elfSymbols.filter(s => s.address_warning).length,
+  [elfSymbols]);
 
   const DEFAULT_SECTION_LIMIT = 200;
   const RECENT_A2L_KEY = "opent-a2l-recents";
@@ -376,6 +479,17 @@ function App() {
     setExpandedItems((current) => (current.length ? current : initialExpanded));
     setSectionItemLimit({});
   }, [a2lTree]);
+
+  // Initialize selected module when metadata loads
+  useEffect(() => {
+    if (metadata && metadata.module_names.length > 0 && !selectedModule) {
+      const stored = localStorage.getItem('elf_target_module');
+      const defaultModule = (stored && metadata.module_names.includes(stored))
+        ? stored
+        : metadata.module_names[0];
+      setSelectedModule(defaultModule);
+    }
+  }, [metadata, selectedModule]);
 
   function pushStatus(type: StatusType, message: string, autoClear = true) {
     if (statusTimeoutRef.current) {
@@ -550,36 +664,103 @@ function App() {
           pushStatus("error", "No A2L project loaded to add to.");
           return;
       }
-      
+
+      // Prepare symbols with type mappings
+      const toAdd = filteredElfSymbols.filter(s => selectedElfSymbols.has(s.name));
+      const symbolsWithMapping: SymbolWithMapping[] = toAdd.map(s => ({
+          name: s.name,
+          address: s.address,
+          a2l_type: s.suggested_a2l_type,
+          lower_limit: s.suggested_limits[0],
+          upper_limit: s.suggested_limits[1],
+          conversion: "NO_COMPU_METHOD",
+          resolution: 1,
+          accuracy: 0,
+      }));
+
+      // Show preview dialog
+      setPreviewMeasurements(symbolsWithMapping);
+      setShowPreviewDialog(true);
+  }
+
+  async function handleConfirmPreview() {
+      if (!metadata) return;
+
       setIsBusy(true);
+      setShowPreviewDialog(false);
+
       try {
-          const toAdd = elfSymbols.filter(s => selectedElfSymbols.has(s.name));
-          
-          // We assume update_project_metadata etc returns EntityUpdateResult, but create_measurements_from_elf matches signature
-          // But wait, my previous code for update_project_metadata returned A2lMetadata, not EntityUpdateResult.
-          // Let's check lib.rs again. Ah, create_measurements_from_elf returns EntityUpdateResult.
-          // list_a2l_tree is separate.
-          
-          interface EntityUpdateResult {
-             metadata: A2lMetadata;
-             entities: CoreEntity[];
+          // Check for conflicts
+          const conflicts = await invoke<ConflictReport>("check_symbol_conflicts", {
+              moduleName: selectedModule || metadata.module_names[0],
+              symbols: previewMeasurements,
+          });
+
+          if (conflicts.conflicts.length > 0) {
+              // Show conflict dialog
+              setConflictReport(conflicts);
+              setShowConflictDialog(true);
+              setIsBusy(false);
+              return;
           }
 
-          const result = await invoke<EntityUpdateResult>("create_measurements_from_elf", { 
-              moduleName: metadata.module_names[0], 
-              symbols: toAdd 
+          // No conflicts, proceed with import
+          await performImport(previewMeasurements);
+      } catch (e) {
+          pushStatus("error", `Failed to check conflicts: ${e}`);
+          setIsBusy(false);
+      }
+  }
+
+  async function handleResolveConflicts(action: 'skip' | 'replace') {
+      if (!metadata || !conflictReport) return;
+
+      let symbolsToImport = [...previewMeasurements];
+
+      if (action === 'skip') {
+          // Skip conflicting symbols
+          const conflictNames = new Set(conflictReport.conflicts.map(c => c.symbol_name));
+          symbolsToImport = symbolsToImport.filter(s => !conflictNames.has(s.name));
+      }
+      // If 'replace', we keep all symbols and let backend replace
+
+      setShowConflictDialog(false);
+      setIsBusy(true);
+
+      try {
+          await performImport(symbolsToImport);
+      } catch (e) {
+          pushStatus("error", `Failed to import symbols: ${e}`);
+      } finally {
+          setIsBusy(false);
+      }
+  }
+
+  async function performImport(symbols: SymbolWithMapping[]) {
+      if (!metadata || symbols.length === 0) return;
+
+      interface EntityUpdateResult {
+         metadata: A2lMetadata;
+         entities: CoreEntity[];
+      }
+
+      try {
+          const result = await invoke<EntityUpdateResult>("create_measurements_with_mapping", {
+              moduleName: selectedModule || metadata.module_names[0],
+              symbols: symbols,
           });
 
           setMetadata(result.metadata);
-          
+
           // Refresh tree
           const tree = await invoke<A2lTree>("list_a2l_tree");
           setA2lTree(tree);
-          
-          pushStatus("success", `Added ${toAdd.length} measurements.`);
+
+          pushStatus("success", `Added ${symbols.length} measurements.`);
           setSelectedElfSymbols(new Set());
       } catch (e) {
           pushStatus("error", `Failed to add symbols: ${e}`);
+          throw e;
       } finally {
           setIsBusy(false);
       }
@@ -777,6 +958,27 @@ function App() {
                     Load ELF Binary
                 </Button>
 
+                {metadata && metadata.module_names.length > 0 && (
+                    <Box sx={{ mt: 3 }}>
+                        <Typography variant="caption" color="text.secondary">TARGET MODULE</Typography>
+                        <TextField
+                            select
+                            fullWidth
+                            size="small"
+                            value={selectedModule || metadata.module_names[0]}
+                            onChange={(e) => {
+                                setSelectedModule(e.target.value);
+                                localStorage.setItem('elf_target_module', e.target.value);
+                            }}
+                            sx={{ mt: 1 }}
+                        >
+                            {metadata.module_names.map(name => (
+                                <MenuItem key={name} value={name}>{name}</MenuItem>
+                            ))}
+                        </TextField>
+                    </Box>
+                )}
+
                 {recentElfFiles.length > 0 && (
                     <Box sx={{ mt: 3 }}>
                          <Typography variant="caption" color="text.secondary">RECENT</Typography>
@@ -811,13 +1013,13 @@ function App() {
                   <Box sx={{ p: 2, px: 3, borderBottom: "1px solid #333", display: "flex", alignItems: "center", justifyContent: "space-between", height: 50, bgcolor: "#252526" }}>
                       <Stack direction="row" spacing={2} alignItems="center">
                           <MemoryIcon sx={{ color: "#4ec9b0" }} />
-                          <Typography variant="h6" sx={{ fontSize: 14 }}>ELF Symbols</Typography> 
-                          {elfSymbols.length > 0 && <Chip label={`${elfSymbols.length} Found`} size="small" variant="outlined" sx={{ height: 20 }} />}
+                          <Typography variant="h6" sx={{ fontSize: 14 }}>ELF Symbols</Typography>
+                          {elfSymbols.length > 0 && <Chip label={`${filteredElfSymbols.length} of ${elfSymbols.length}`} size="small" variant="outlined" sx={{ height: 20 }} />}
                           {selectedElfSymbols.size > 0 && <Chip label={`${selectedElfSymbols.size} Selected`} size="small" color="primary" sx={{ height: 20 }} />}
                       </Stack>
                       <Stack direction="row" spacing={1}>
-                          <Button 
-                              variant="contained" 
+                          <Button
+                              variant="contained"
                               disabled={selectedElfSymbols.size === 0 || !metadata}
                               startIcon={<AddIcon />}
                               size="small"
@@ -827,48 +1029,142 @@ function App() {
                           </Button>
                       </Stack>
                   </Box>
-                  
+
+                  {elfSymbols.length > 0 && (
+                      <Box sx={{ p: 2, px: 3, borderBottom: "1px solid #333", bgcolor: "#252526" }}>
+                          <TextField
+                              fullWidth
+                              size="small"
+                              placeholder="Search symbols..."
+                              value={elfSearchQuery}
+                              onChange={(e) => setElfSearchQuery(e.target.value)}
+                              InputProps={{
+                                  startAdornment: <SearchIcon sx={{ mr: 1, color: "#888" }} />
+                              }}
+                              sx={{ mb: 1 }}
+                          />
+                          <Stack direction="row" spacing={1}>
+                              <TextField
+                                  select
+                                  size="small"
+                                  label="Type"
+                                  sx={{ minWidth: 120 }}
+                                  SelectProps={{
+                                      multiple: true,
+                                      value: Array.from(elfFilterTypes),
+                                      onChange: (e) => setElfFilterTypes(new Set(e.target.value as string[]))
+                                  }}
+                              >
+                                  {elfTypeOptions.map(type => <MenuItem key={type} value={type}>{type}</MenuItem>)}
+                              </TextField>
+                              <TextField
+                                  select
+                                  size="small"
+                                  label="Section"
+                                  sx={{ minWidth: 120 }}
+                                  SelectProps={{
+                                      multiple: true,
+                                      value: Array.from(elfFilterSections),
+                                      onChange: (e) => setElfFilterSections(new Set(e.target.value as string[]))
+                                  }}
+                              >
+                                  {elfSectionOptions.map(section => <MenuItem key={section} value={section}>{section}</MenuItem>)}
+                              </TextField>
+                              <TextField
+                                  select
+                                  size="small"
+                                  label="Bind"
+                                  sx={{ minWidth: 120 }}
+                                  SelectProps={{
+                                      multiple: true,
+                                      value: Array.from(elfFilterBinds),
+                                      onChange: (e) => setElfFilterBinds(new Set(e.target.value as string[]))
+                                  }}
+                              >
+                                  {elfBindOptions.map(bind => <MenuItem key={bind} value={bind}>{bind}</MenuItem>)}
+                              </TextField>
+                              {(elfFilterTypes.size > 0 || elfFilterSections.size > 0 || elfFilterBinds.size > 0) && (
+                                  <Button size="small" onClick={() => {
+                                      setElfFilterTypes(new Set());
+                                      setElfFilterSections(new Set());
+                                      setElfFilterBinds(new Set());
+                                  }}>Clear Filters</Button>
+                              )}
+                          </Stack>
+                          {addressOverflowCount > 0 && (
+                              <Alert severity="warning" sx={{ mt: 1 }}>
+                                  {addressOverflowCount} symbols have addresses exceeding 32-bit range and will be truncated.
+                              </Alert>
+                          )}
+                      </Box>
+                  )}
+
                   {elfSymbols.length > 0 ? (
                       <TableContainer sx={{ flex: 1, overflow: "auto" }}>
                           <Table stickyHeader size="small">
                               <TableHead>
                                   <TableRow>
                                       <TableCell padding="checkbox" sx={{ bgcolor: "#1e1e1e" }}>
-                                          <Checkbox 
-                                              checked={selectedElfSymbols.size === elfSymbols.length && elfSymbols.length > 0}
-                                              indeterminate={selectedElfSymbols.size > 0 && selectedElfSymbols.size < elfSymbols.length}
+                                          <Checkbox
+                                              checked={selectedElfSymbols.size === filteredElfSymbols.length && filteredElfSymbols.length > 0}
+                                              indeterminate={selectedElfSymbols.size > 0 && selectedElfSymbols.size < filteredElfSymbols.length}
                                               onChange={(e) => {
-                                                  if (e.target.checked) setSelectedElfSymbols(new Set(elfSymbols.map(s => s.name)));
+                                                  if (e.target.checked) setSelectedElfSymbols(new Set(filteredElfSymbols.map(s => s.name)));
                                                   else setSelectedElfSymbols(new Set());
                                               }}
                                               size="small"
                                           />
                                       </TableCell>
-                                      <TableCell sx={{ bgcolor: "#1e1e1e", fontWeight: 600 }}>Name</TableCell>
-                                      <TableCell sx={{ bgcolor: "#1e1e1e", fontWeight: 600 }}>Address</TableCell>
-                                      <TableCell sx={{ bgcolor: "#1e1e1e", fontWeight: 600 }}>Size</TableCell>
-                                      <TableCell sx={{ bgcolor: "#1e1e1e", fontWeight: 600 }}>Type</TableCell>
+                                      <TableCell sx={{ bgcolor: "#1e1e1e", fontWeight: 600, cursor: "pointer" }} onClick={() => {
+                                          setElfSortColumn('name');
+                                          setElfSortDirection(prev => prev === 'asc' ? 'desc' : 'asc');
+                                      }}>
+                                          Name {elfSortColumn === 'name' && (elfSortDirection === 'asc' ? '↑' : '↓')}
+                                      </TableCell>
+                                      <TableCell sx={{ bgcolor: "#1e1e1e", fontWeight: 600, cursor: "pointer" }} onClick={() => {
+                                          setElfSortColumn('address');
+                                          setElfSortDirection(prev => prev === 'asc' ? 'desc' : 'asc');
+                                      }}>
+                                          Address {elfSortColumn === 'address' && (elfSortDirection === 'asc' ? '↑' : '↓')}
+                                      </TableCell>
+                                      <TableCell sx={{ bgcolor: "#1e1e1e", fontWeight: 600, cursor: "pointer" }} onClick={() => {
+                                          setElfSortColumn('size');
+                                          setElfSortDirection(prev => prev === 'asc' ? 'desc' : 'asc');
+                                      }}>
+                                          Size {elfSortColumn === 'size' && (elfSortDirection === 'asc' ? '↑' : '↓')}
+                                      </TableCell>
+                                      <TableCell sx={{ bgcolor: "#1e1e1e", fontWeight: 600, cursor: "pointer" }} onClick={() => {
+                                          setElfSortColumn('type');
+                                          setElfSortDirection(prev => prev === 'asc' ? 'desc' : 'asc');
+                                      }}>
+                                          ELF Type {elfSortColumn === 'type' && (elfSortDirection === 'asc' ? '↑' : '↓')}
+                                      </TableCell>
+                                      <TableCell sx={{ bgcolor: "#1e1e1e", fontWeight: 600 }}>A2L Type</TableCell>
                                       <TableCell sx={{ bgcolor: "#1e1e1e", fontWeight: 600 }}>Section</TableCell>
                                   </TableRow>
                               </TableHead>
                               <TableBody>
-                                  {elfSymbols.map((row) => (
+                                  {filteredElfSymbols.map((row) => (
                                       <TableRow key={row.name} hover selected={selectedElfSymbols.has(row.name)} onClick={() => {
                                            const next = new Set(selectedElfSymbols);
                                            if (next.has(row.name)) next.delete(row.name);
                                            else next.add(row.name);
                                            setSelectedElfSymbols(next);
-                                      }} sx={{ cursor: "pointer" }}>
+                                      }} sx={{ cursor: "pointer", bgcolor: row.address_warning ? "rgba(255, 152, 0, 0.08)" : undefined }}>
                                           <TableCell padding="checkbox">
-                                              <Checkbox 
+                                              <Checkbox
                                                   checked={selectedElfSymbols.has(row.name)}
                                                   size="small"
                                               />
                                           </TableCell>
                                           <TableCell sx={{ fontFamily: "monospace" }}>{row.name}</TableCell>
-                                          <TableCell sx={{ fontFamily: "monospace", color: "#4ec9b0" }}>0x{row.address.toString(16).toUpperCase()}</TableCell>
+                                          <TableCell sx={{ fontFamily: "monospace", color: "#4ec9b0" }}>
+                                              0x{row.address.toString(16).toUpperCase()}
+                                              {row.address_warning && <span style={{ color: "#ff9800", marginLeft: 4 }}>⚠</span>}
+                                          </TableCell>
                                           <TableCell sx={{ fontFamily: "monospace", color: "#4ec9b0" }}>0x{row.size.toString(16).toUpperCase()}</TableCell>
                                           <TableCell><Chip label={row.type_str} size="small" variant="outlined" sx={{ height: 16, fontSize: 10 }} /></TableCell>
+                                          <TableCell><Chip label={row.suggested_a2l_type} size="small" color="primary" sx={{ height: 16, fontSize: 10 }} /></TableCell>
                                           <TableCell sx={{ color: "#888" }}>{row.section}</TableCell>
                                       </TableRow>
                                   ))}
@@ -1048,6 +1344,135 @@ function App() {
         </Box>
 
         <StatusBar status={status} fileName={fileName} elfName={elfFileName} />
+
+        {/* Conflict Resolution Dialog */}
+        <Dialog open={showConflictDialog} onClose={() => setShowConflictDialog(false)} maxWidth="md" fullWidth>
+            <DialogTitle>Symbol Import Conflicts</DialogTitle>
+            <DialogContent>
+                {conflictReport && (
+                    <>
+                        <Alert severity="warning" sx={{ mb: 2 }}>
+                            {conflictReport.conflicts.length} of {conflictReport.conflicts.length + conflictReport.non_conflicts.length} symbols already exist in the project.
+                        </Alert>
+                        <TableContainer sx={{ maxHeight: 400 }}>
+                            <Table size="small">
+                                <TableHead>
+                                    <TableRow>
+                                        <TableCell>Symbol Name</TableCell>
+                                        <TableCell>Existing</TableCell>
+                                        <TableCell>New</TableCell>
+                                    </TableRow>
+                                </TableHead>
+                                <TableBody>
+                                    {conflictReport.conflicts.map(conflict => (
+                                        <TableRow key={conflict.symbol_name}>
+                                            <TableCell>{conflict.symbol_name}</TableCell>
+                                            <TableCell>{conflict.existing_address} ({conflict.existing_type})</TableCell>
+                                            <TableCell>{conflict.new_address} ({conflict.new_type})</TableCell>
+                                        </TableRow>
+                                    ))}
+                                </TableBody>
+                            </Table>
+                        </TableContainer>
+                    </>
+                )}
+            </DialogContent>
+            <DialogActions>
+                <Button onClick={() => setShowConflictDialog(false)}>Cancel</Button>
+                <Button onClick={() => handleResolveConflicts('skip')} variant="outlined">
+                    Skip Conflicts ({conflictReport?.non_conflicts.length || 0} symbols)
+                </Button>
+                <Button onClick={() => handleResolveConflicts('replace')} variant="contained" color="warning">
+                    Replace All
+                </Button>
+            </DialogActions>
+        </Dialog>
+
+        {/* Preview Dialog */}
+        <Dialog open={showPreviewDialog} onClose={() => setShowPreviewDialog(false)} maxWidth="lg" fullWidth>
+            <DialogTitle>Import Preview - {previewMeasurements.length} symbols selected</DialogTitle>
+            <DialogContent>
+                <TableContainer sx={{ maxHeight: 500 }}>
+                    <Table size="small" stickyHeader>
+                        <TableHead>
+                            <TableRow>
+                                <TableCell>Name</TableCell>
+                                <TableCell>Address</TableCell>
+                                <TableCell>Type</TableCell>
+                                <TableCell>Lower Limit</TableCell>
+                                <TableCell>Upper Limit</TableCell>
+                            </TableRow>
+                        </TableHead>
+                        <TableBody>
+                            {previewMeasurements.map((measurement, idx) => (
+                                <TableRow key={idx}>
+                                    <TableCell sx={{ fontFamily: "monospace" }}>{measurement.name}</TableCell>
+                                    <TableCell sx={{ fontFamily: "monospace", color: "#4ec9b0" }}>
+                                        0x{measurement.address.toString(16).toUpperCase()}
+                                    </TableCell>
+                                    <TableCell>
+                                        <TextField
+                                            select
+                                            size="small"
+                                            value={measurement.a2l_type}
+                                            onChange={(e) => {
+                                                const updated = [...previewMeasurements];
+                                                updated[idx].a2l_type = e.target.value;
+                                                setPreviewMeasurements(updated);
+                                            }}
+                                            sx={{ minWidth: 120 }}
+                                        >
+                                            <MenuItem value="UBYTE">UBYTE</MenuItem>
+                                            <MenuItem value="SBYTE">SBYTE</MenuItem>
+                                            <MenuItem value="UWORD">UWORD</MenuItem>
+                                            <MenuItem value="SWORD">SWORD</MenuItem>
+                                            <MenuItem value="ULONG">ULONG</MenuItem>
+                                            <MenuItem value="SLONG">SLONG</MenuItem>
+                                            <MenuItem value="A_UINT64">A_UINT64</MenuItem>
+                                            <MenuItem value="A_INT64">A_INT64</MenuItem>
+                                            <MenuItem value="FLOAT32_IEEE">FLOAT32_IEEE</MenuItem>
+                                            <MenuItem value="FLOAT64_IEEE">FLOAT64_IEEE</MenuItem>
+                                        </TextField>
+                                    </TableCell>
+                                    <TableCell>
+                                        <TextField
+                                            size="small"
+                                            type="number"
+                                            value={measurement.lower_limit}
+                                            onChange={(e) => {
+                                                const updated = [...previewMeasurements];
+                                                updated[idx].lower_limit = parseFloat(e.target.value);
+                                                setPreviewMeasurements(updated);
+                                            }}
+                                            sx={{ width: 100 }}
+                                        />
+                                    </TableCell>
+                                    <TableCell>
+                                        <TextField
+                                            size="small"
+                                            type="number"
+                                            value={measurement.upper_limit}
+                                            onChange={(e) => {
+                                                const updated = [...previewMeasurements];
+                                                updated[idx].upper_limit = parseFloat(e.target.value);
+                                                setPreviewMeasurements(updated);
+                                            }}
+                                            sx={{ width: 100 }}
+                                        />
+                                    </TableCell>
+                                </TableRow>
+                            ))}
+                        </TableBody>
+                    </Table>
+                </TableContainer>
+            </DialogContent>
+            <DialogActions>
+                <Button onClick={() => setShowPreviewDialog(false)}>Cancel</Button>
+                <Button onClick={handleConfirmPreview} variant="contained">
+                    Continue to Import
+                </Button>
+            </DialogActions>
+        </Dialog>
       </Box>
     </ThemeProvider>
   );
