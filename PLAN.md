@@ -50,8 +50,8 @@
   - [x] Edit CHARACTERISTIC (Full editor)
   - [x] Edit AXIS_PTS (Full editor)
   - [x] Product owner demo: edit core entities and save
-  - [ ] E2E: modify entity → save → reload
-- [ ] B3: Computation & conversion
+  - [x] E2E: modify entity → save → reload
+- [ ] B3: Computation & conversion (Deferred to Iteration 6)
   - [ ] Edit COMPU_METHOD/COMPU_TAB/COMPU_VTAB
   - [ ] Validate references
   - [ ] Product owner demo: update conversion & export
@@ -59,9 +59,9 @@
 
 ## Iteration 3 — Templates & Creation (Series C)
 - [ ] C1: New A2L creation
-  - [ ] Create empty database
-  - [ ] Initialize minimal PROJECT/MODULE
-  - [ ] Product owner demo: create new empty A2L
+  - [x] Create empty database
+  - [x] Initialize minimal PROJECT/MODULE
+  - [x] Product owner demo: create new empty A2L
   - [ ] E2E: new → save → re-open
 - [ ] C2: Template-based creation
   - [ ] Include baseline + powertrain templates
@@ -70,17 +70,17 @@
   - [ ] E2E: new from template → validate
 
 ## Iteration 4 — ELF Import (Series D)
-- [ ] D1: ELF ingestion
-  - [ ] Import ELF (initial architecture set)
-  - [ ] Display symbol table and types
-  - [ ] Product owner demo: import ELF and browse symbols
-  - [ ] E2E: import ELF → list symbols
-- [ ] D2: Symbol-to-A2L mapping
-  - [ ] Map variables to MEASUREMENT/CHARACTERISTIC
-  - [ ] Address resolution and name normalization
-  - [ ] Product owner demo: map symbols to A2L
-  - [ ] E2E: import ELF → map → save
-- [ ] D3: Struct-based generation
+- [x] D1: ELF ingestion
+  - [x] Import ELF (initial architecture set)
+  - [x] Display symbol table and types
+  - [x] Product owner demo: import ELF and browse symbols
+  - [x] E2E: import ELF → list symbols
+- [x] D2: Symbol-to-A2L mapping
+  - [x] Map variables to MEASUREMENT/CHARACTERISTIC
+  - [x] Address resolution and name normalization
+  - [x] Product owner demo: map symbols to A2L
+  - [x] E2E: import ELF → map → save
+- [ ] D3: Struct-based generation (Deferred to Iteration 6)
   - [ ] Generate entries from struct layouts
   - [ ] Conflict handling UI
   - [ ] Product owner demo: generate from structs
