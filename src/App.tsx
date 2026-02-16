@@ -391,7 +391,7 @@ function App() {
 
   // --- Handlers ---
 
-  async function handleFileSelect(fileInput: File | { name: string; path?: string | null } | null) {
+  async function handleFileSelect(fileInput: File | { name: string; path?: string | null } | null | undefined) {
     if (!fileInput) return;
     setIsBusy(true);
     pushStatus("info", "Loading ...", false);
@@ -502,27 +502,39 @@ function App() {
   };
   const handleClose = () => getCurrentWindow().close().catch(() => {});
 
-  async function handleLoadElf(file: File) {
-      if (!file) return;
+  async function handleLoadElf(fileInput: File | { name: string; path?: string | null } | undefined) {
+      if (!fileInput) return;
       setIsBusy(true);
       pushStatus("info", "Loading ELF symbols...", false);
-      const filePath = (file as any).path;
-      if (!filePath) {
-          pushStatus("error", "Cannot load ELF (path requisite)"); // Web browser restriction
-          setIsBusy(false);
-          return;
-      }
-      setElfFileName(file.name);
-      
+
+      // Check if it's a real File object (has arrayBuffer method)
+      const isRealFile = "arrayBuffer" in fileInput && typeof (fileInput as any).arrayBuffer === "function";
+      const filePath = (fileInput as any).path;
+      setElfFileName(fileInput.name);
+
       try {
-          const symbols = await invoke<ElfSymbol[]>("load_elf_symbols", { path: filePath });
+          let symbols: ElfSymbol[];
+
+          // Use arrayBuffer() for dropped/selected files, invoke path for recents/files with path on disk
+          if (isRealFile) {
+              const arrayBuffer = await (fileInput as File).arrayBuffer();
+              const buffer = Array.from(new Uint8Array(arrayBuffer));
+              symbols = await invoke<ElfSymbol[]>("load_elf_symbols_from_bytes", { buffer });
+          } else if (filePath) {
+              symbols = await invoke<ElfSymbol[]>("load_elf_symbols", { path: filePath });
+          } else {
+              throw new Error("Cannot load file: missing path or content source.");
+          }
+
           setElfSymbols(symbols);
           setSelectedElfSymbols(new Set());
-          
-          // Add to recents
-          addRecentFile(RECENT_ELF_KEY, recentElfFiles, setRecentElfFiles, {
-             name: file.name, path: filePath, lastOpened: Date.now()
-          });
+
+          // Add to recents (only if we have a path)
+          if (filePath) {
+              addRecentFile(RECENT_ELF_KEY, recentElfFiles, setRecentElfFiles, {
+                 name: fileInput.name, path: filePath, lastOpened: Date.now()
+              });
+          }
 
           pushStatus("success", `Loaded ${symbols.length} symbols.`);
       } catch (e) {

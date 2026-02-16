@@ -146,7 +146,10 @@ export const setupTauriMock = (data: { initialState: MockState, persistenceKey?:
             // ELF
              case "load_elf_symbols":
                 return state.elf_symbols || [];
-            
+
+            case "load_elf_symbols_from_bytes":
+                return state.elf_symbols || [];
+
             case "create_measurements_from_elf": {
                 const { symbols } = args;
                 const newMeas = symbols.map((s: any) => ({
