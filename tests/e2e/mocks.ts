@@ -57,6 +57,9 @@ export const setupTauriMock = (data: { initialState: MockState, persistenceKey?:
         };
 
         switch (cmd) {
+            case "plugin:dialog|open":
+                return ELF_FILE_PATH;
+
             case "load_a2l_from_string":
             case "load_a2l_from_path":
                 // If loading from disk, we might want to reload state? 
@@ -260,3 +263,27 @@ export const setupTauriMock = (data: { initialState: MockState, persistenceKey?:
       }
     };
 };
+
+// Convenience wrapper: injects a default empty mock state into a Playwright page.
+// Used by tests that just need the Tauri backend stubbed with minimal data.
+import type { Page } from "@playwright/test";
+
+const DEFAULT_STATE: MockState = {
+    metadata: {
+        project_name: "demo_project",
+        project_long_identifier: "",
+        module_names: ["demo_module"],
+        warning_count: 0,
+    },
+    measurements: [],
+    characteristics: [],
+    axis_pts: [],
+    elf_symbols: [
+        { name: "engine_speed", address: 0x1000, size: 2, bind: "GLOBAL", type_str: "OBJECT", section: ".data" },
+        { name: "vehicle_speed", address: 0x1002, size: 2, bind: "GLOBAL", type_str: "OBJECT", section: ".data" },
+    ],
+};
+
+export async function setupTauriMocks(page: Page) {
+    await page.addInitScript(setupTauriMock, { initialState: DEFAULT_STATE });
+}

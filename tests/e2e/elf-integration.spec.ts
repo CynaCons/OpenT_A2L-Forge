@@ -71,8 +71,10 @@ test("End-to-end: Load A2L, Load ELF, Add Variable, Save, Reload, Verify", async
     const row = page.getByRole("row").filter({ hasText: "New_Variable_A" });
     await row.getByRole("checkbox").check();
 
-    // 7. Add to Project
+    // 7. Add to Project (opens preview dialog first)
     await page.getByRole("button", { name: "Add to Project" }).click();
+    await expect(page.getByRole("dialog", { name: /Import Preview/ })).toBeVisible();
+    await page.getByRole("button", { name: "Continue to Import" }).click();
     await expect(page.getByText("Added 1 measurements.")).toBeVisible();
 
     // 8. Verify in Tree

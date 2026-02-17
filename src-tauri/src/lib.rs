@@ -1063,8 +1063,6 @@ fn datatype_to_string(dt: &a2lfile::DataType) -> String {
         a2lfile::DataType::Float16Ieee => "FLOAT16_IEEE".to_string(),
         a2lfile::DataType::Float32Ieee => "FLOAT32_IEEE".to_string(),
         a2lfile::DataType::Float64Ieee => "FLOAT64_IEEE".to_string(),
-        // Fallback for any future types or if debug format differs
-        _ => format!("{:?}", dt).to_uppercase(),
     }
 }
 
@@ -1558,7 +1556,7 @@ fn create_measurements_with_mapping(
         a2l.project.module.iter_mut().find(|m| m.get_name() == name)
             .ok_or(format!("Module {} not found", name))?
     } else {
-        a2l.project.module.get_mut(0).ok_or("No modules in project")?
+        a2l.project.module.iter_mut().next().ok_or("No modules in project")?
     };
 
     for sym in symbols {
