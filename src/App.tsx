@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useRef, useState, type Dispatch, type SetStateAction } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { getCurrentWindow } from "@tauri-apps/api/window";
-import { open } from "@tauri-apps/plugin-dialog";
+import { listen } from "@tauri-apps/api/event";
+import { open, save } from "@tauri-apps/plugin-dialog";
 import {
   Box,
   Button,
@@ -20,6 +21,7 @@ import {
   createTheme,
   Tooltip,
   InputBase,
+  LinearProgress,
   Card,
   CardContent,
   Table,
@@ -137,6 +139,9 @@ type ElfSymbol = {
   suggested_a2l_type: string;
   suggested_limits: [number, number];
   address_warning: string | null;
+  dwarf_type: string | null;
+  is_struct_member: boolean;
+  parent_struct: string | null;
 };
 
 type SymbolWithMapping = {
@@ -262,7 +267,7 @@ function StatusBar({ status, fileName, elfName }: { status: StatusState | null, 
       <Stack direction="row" spacing={2} alignItems="center">
         <Box sx={{ display: "flex", alignItems: "center", gap: 0.5 }}>
            {status?.type === "error" ? <CloseIcon sx={{ fontSize: 12 }} /> : <Terminal sx={{ fontSize: 12 }} />}
-           <span>{status?.message || "Ready"}</span>
+           <span data-testid="status-message">{status?.message || "Ready"}</span>
         </Box>
       </Stack>
       <Stack direction="row" spacing={3} alignItems="center">
@@ -309,6 +314,7 @@ function App() {
   const [conflictReport, setConflictReport] = useState<ConflictReport | null>(null);
   const [showPreviewDialog, setShowPreviewDialog] = useState(false);
   const [previewMeasurements, setPreviewMeasurements] = useState<SymbolWithMapping[]>([]);
+  const [elfChangedBanner, setElfChangedBanner] = useState(false);
   const statusTimeoutRef = useRef<number | null>(null);
 
   const refreshTree = async () => {
@@ -497,55 +503,94 @@ function App() {
       statusTimeoutRef.current = null;
     }
     setStatus({ type, message });
-    if (autoClear) {
+    // Errors never auto-dismiss — user must acknowledge them
+    if (autoClear && type !== "error") {
       statusTimeoutRef.current = window.setTimeout(() => {
         setStatus(null);
       }, 3500);
     }
   }
 
+  // Listen for ELF file change events from the backend
+  useEffect(() => {
+    let unlisten: (() => void) | undefined;
+    listen<string>("elf-changed", () => {
+      setElfChangedBanner(true);
+      pushStatus("info", "ELF file changed on disk.");
+    }).then((fn) => { unlisten = fn; }).catch(() => {});
+    return () => { unlisten?.(); };
+  }, []);
+
+  async function handleUpdateEcuAddresses() {
+    if (!metadata || elfSymbols.length === 0) return;
+    setIsBusy(true);
+    try {
+      const result = await invoke<{ updated_count: number; matched_names: string[] }>(
+        "update_ecu_addresses",
+        { moduleName: selectedModule || metadata.module_names[0] }
+      );
+      pushStatus("success", `Updated ${result.updated_count} ECU addresses.`);
+      await refreshTree();
+    } catch (e) {
+      pushStatus("error", `Update ECU addresses failed: ${e}`);
+    } finally {
+      setIsBusy(false);
+      setElfChangedBanner(false);
+    }
+  }
+
+  async function handleReloadElf() {
+    setElfChangedBanner(false);
+    if (elfFileName) {
+      // Re-trigger ELF load from the sidebar's recent entry
+      const recentElf = recentElfFiles.find(f => f.name === elfFileName);
+      if (recentElf?.path) {
+        await handleLoadElfFromPath(recentElf.path);
+      }
+    }
+  }
+
   // --- Handlers ---
 
-  async function handleFileSelect(fileInput: File | { name: string; path?: string | null } | null | undefined) {
-    if (!fileInput) return;
+  async function handleOpenA2lDialog() {
+    const filePath = await open({
+      title: "Open A2L File",
+      multiple: false,
+      filters: [
+        { name: "A2L Files", extensions: ["a2l"] },
+        { name: "All Files", extensions: ["*"] },
+      ],
+    });
+
+    if (filePath) {
+      await handleLoadA2lFromPath(filePath as string);
+    }
+  }
+
+  async function handleLoadA2lFromPath(filePath: string) {
     setIsBusy(true);
     pushStatus("info", "Loading ...", false);
-    
-    // Check if it's a real File object (has arrayBuffer/text methods)
-    const isRealFile = "text" in fileInput && typeof (fileInput as any).text === "function";
-    const filePath = (fileInput as any).path;
-    setFileName(fileInput.name);
-    setCurrentFilePath(filePath || null);
+    const name = filePath.split(/[\\/]/).pop() || filePath;
+    setFileName(name);
+    setCurrentFilePath(filePath);
 
     try {
-        let metadata: A2lMetadata;
-        // Use text() for dropped/selected files, invoke path for recents/files with path on disk
-        if (isRealFile) {
-             const contents = await (fileInput as File).text();
-             metadata = await invoke<A2lMetadata>("load_a2l_from_string", { contents });
-        } else if (filePath) {
-             metadata = await invoke<A2lMetadata>("load_a2l_from_path", { path: filePath });
-        } else {
-             throw new Error("Cannot load file: missing path or content source.");
-        }
-        
-        setMetadata(metadata);
-        const tree = await invoke<A2lTree>("list_a2l_tree");
-        setA2lTree(tree);
+      const result = await invoke<A2lMetadata>("load_a2l_from_path", { path: filePath });
+      setMetadata(result);
+      const tree = await invoke<A2lTree>("list_a2l_tree");
+      setA2lTree(tree);
 
-        if (filePath) {
-            addRecentFile(RECENT_A2L_KEY, recentA2lFiles, setRecentA2lFiles, {
-                name: fileInput.name, 
-                path: filePath, 
-                lastOpened: Date.now(),
-            });
-        }
-        pushStatus("success", "Loaded successfully.");
-    } catch(e) {
-        console.error(e);
-        pushStatus("error", `Load failed: ${e}`, false);
+      addRecentFile(RECENT_A2L_KEY, recentA2lFiles, setRecentA2lFiles, {
+        name,
+        path: filePath,
+        lastOpened: Date.now(),
+      });
+      pushStatus("success", "Loaded successfully.");
+    } catch (e) {
+      console.error(e);
+      pushStatus("error", `Load failed: ${e}`, false);
     } finally {
-        setIsBusy(false);
+      setIsBusy(false);
     }
   }
 
@@ -579,12 +624,19 @@ function App() {
              await invoke("save_a2l_to_path", { path: currentFilePath });
              pushStatus("success", "Saved successfully.");
         } else {
-             const name = prompt("Enter file path to save (absolute path):", fileName || "new_project.a2l");
-             if (name) {
+             const savePath = await save({
+                 title: "Save A2L File",
+                 defaultPath: fileName || "new_project.a2l",
+                 filters: [
+                     { name: "A2L Files", extensions: ["a2l"] },
+                     { name: "All Files", extensions: ["*"] },
+                 ],
+             });
+             if (savePath) {
                  pushStatus("info", "Saving...", false);
-                 await invoke("save_a2l_to_path", { path: name });
-                 setCurrentFilePath(name);
-                 setFileName(name.split(/[\\/]/).pop() || name); // naive
+                 await invoke("save_a2l_to_path", { path: savePath });
+                 setCurrentFilePath(savePath);
+                 setFileName(savePath.split(/[\\/]/).pop() || savePath);
                  pushStatus("success", "Saved successfully.");
              }
         }
@@ -599,23 +651,30 @@ function App() {
   const [isMaximized, setIsMaximized] = useState(false);
 
   useEffect(() => {
-    const updateState = async () => {
-        setIsMaximized(await getCurrentWindow().isMaximized());
-    };
-    updateState();
+    let unlisten: (() => void) | undefined;
+    try {
+      const win = getCurrentWindow();
+      const updateState = async () => {
+          try { setIsMaximized(await win.isMaximized()); } catch {}
+      };
+      updateState();
 
-    // Listen to resize events to update the icon if the user snaps the window
-    // Note: Tauri v2 APIs might differ slightly, checking periodically or on focus is a safe fallback
-    const interval = setInterval(updateState, 1000);
-    return () => clearInterval(interval);
+      win.onResized(async () => {
+          try { setIsMaximized(await win.isMaximized()); } catch {}
+      }).then((fn) => { unlisten = fn; }).catch(() => {});
+    } catch {}
+
+    return () => { unlisten?.(); };
   }, []);
 
-  const handleMinimize = () => getCurrentWindow().minimize().catch(() => {});
+  const handleMinimize = () => { try { getCurrentWindow().minimize().catch(() => {}); } catch {} };
   const handleToggleMaximize = async () => {
-      await getCurrentWindow().toggleMaximize();
-      setIsMaximized(await getCurrentWindow().isMaximized());
+      try {
+          await getCurrentWindow().toggleMaximize();
+          setIsMaximized(await getCurrentWindow().isMaximized());
+      } catch {}
   };
-  const handleClose = () => getCurrentWindow().close().catch(() => {});
+  const handleClose = () => { try { getCurrentWindow().close().catch(() => {}); } catch {} };
 
   async function handleOpenElfDialog() {
       const filePath = await open({
@@ -766,15 +825,40 @@ function App() {
       }
   }
 
+  // --- Keyboard Shortcuts ---
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      if (e.ctrlKey || e.metaKey) {
+        if (e.key === "o") { e.preventDefault(); handleOpenA2lDialog(); }
+        if (e.key === "s") { e.preventDefault(); handleSaveA2l(); }
+        if (e.key === "n") { e.preventDefault(); handleCreateA2l(); }
+      }
+      if (e.key === "Escape" && isEditing) { setIsEditing(false); }
+    };
+    window.addEventListener("keydown", handler);
+    return () => window.removeEventListener("keydown", handler);
+  });
+
+  // --- E2E Test Hooks (expose handlers for binary Playwright tests) ---
+  useEffect(() => {
+    (window as any).__E2E__ = {
+      loadA2lFromPath: handleLoadA2lFromPath,
+      loadElfFromPath: handleLoadElfFromPath,
+      createA2l: handleCreateA2l,
+    };
+    return () => { delete (window as any).__E2E__; };
+  });
+
   // --- Render Sections ---
 
   const renderActivityBar = () => (
     <Box sx={{ width: 48, bgcolor: "#333333", display: "flex", flexDirection: "column", alignItems: "center", get py() { return 1.5; } }}>
         <Tooltip title="Explorer" placement="right">
-            <IconButton 
-                onClick={() => setActiveView("a2l")} 
-                sx={{ 
-                    mb: 1, 
+            <IconButton
+                data-testid="sidebar-explorer"
+                onClick={() => setActiveView("a2l")}
+                sx={{
+                    mb: 1,
                     color: activeView === "a2l" ? "#fff" : "rgba(255,255,255,0.4)",
                     borderLeft: activeView === "a2l" ? "2px solid #3794ff" : "2px solid transparent",
                     borderRadius: 0,
@@ -785,10 +869,11 @@ function App() {
             </IconButton>
         </Tooltip>
         <Tooltip title="ELF Symbols" placement="right">
-            <IconButton 
+            <IconButton
+                data-testid="sidebar-elf"
                 onClick={() => setActiveView("elf")}
-                sx={{ 
-                    mb: 1, 
+                sx={{
+                    mb: 1,
                     color: activeView === "elf" ? "#fff" : "rgba(255,255,255,0.4)",
                     borderLeft: activeView === "elf" ? "2px solid #3794ff" : "2px solid transparent",
                     borderRadius: 0,
@@ -800,7 +885,7 @@ function App() {
         </Tooltip>
         <Box sx={{ flex: 1 }} />
         <Tooltip title="Settings" placement="right">
-             <IconButton onClick={() => setActiveView("settings")} sx={{ color: "rgba(255,255,255,0.4)" }}>
+             <IconButton data-testid="sidebar-settings" onClick={() => setActiveView("settings")} sx={{ color: "rgba(255,255,255,0.4)" }}>
                 <SettingsIcon />
             </IconButton>
         </Tooltip>
@@ -812,29 +897,29 @@ function App() {
         minWidth: 280,
         maxWidth: "40vw",
         width: "fit-content",
-        bgcolor: "#252526", 
-        display: "flex", 
-        flexDirection: "column", 
+        bgcolor: "#252526",
+        display: "flex",
+        flexDirection: "column",
         borderRight: "1px solid #333",
-        whiteSpace: "nowrap"
+        whiteSpace: "nowrap",
+        overflow: "hidden"
     }}>
         {activeView === "a2l" && (
             <>
                 <Box sx={{ p: 1, px: 2, display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-                    <Typography variant="overline" sx={{ fontWeight: 600, letterSpacing: 1, color: "#bbb" }}>EXPLORER</Typography>
+                    <Typography variant="overline" data-testid="heading-explorer" sx={{ fontWeight: 600, letterSpacing: 1, color: "#bbb" }}>EXPLORER</Typography>
                     <Stack direction="row">
                         <Tooltip title="New A2L">
-                            <IconButton size="small" onClick={handleCreateA2l}><AddIcon fontSize="small" /></IconButton>
+                            <IconButton size="small" data-testid="btn-new-a2l" onClick={handleCreateA2l}><AddIcon fontSize="small" /></IconButton>
                         </Tooltip>
                          <Tooltip title="Open A2L">
-                            <IconButton size="small" component="label">
+                            <IconButton size="small" data-testid="btn-open-a2l" onClick={handleOpenA2lDialog} aria-label="Open A2L">
                                 <FolderOpenIcon fontSize="small" />
-                                <input type="file" accept=".a2l" hidden onChange={(e) => handleFileSelect(e.target.files?.[0])} />
                             </IconButton>
                         </Tooltip>
                         {metadata && (
                             <Tooltip title="Save A2L">
-                                <IconButton size="small" onClick={handleSaveA2l}><SaveIcon fontSize="small" /></IconButton>
+                                <IconButton size="small" data-testid="btn-save-a2l" onClick={handleSaveA2l}><SaveIcon fontSize="small" /></IconButton>
                             </Tooltip>
                         )}
                     </Stack>
@@ -854,9 +939,10 @@ function App() {
                         }}
                     >
                         <SearchIcon sx={{ fontSize: 16, color: "#888", ml: 1, mr: 1 }} />
-                         <InputBase 
-                            placeholder="Search entities..." 
-                            sx={{ ml: 1, flex: 1, fontSize: 12 }} 
+                         <InputBase
+                            data-testid="search-entities"
+                            placeholder="Search entities..."
+                            sx={{ ml: 1, flex: 1, fontSize: 12 }}
                             value={searchQuery}
                             onChange={(e) => setSearchQuery(e.target.value)}
                         />
@@ -864,12 +950,12 @@ function App() {
                 </Box>
 
                 {!metadata && recentA2lFiles.length > 0 && (
-                    <Box sx={{ flex: 1, overflow: "auto" }}>
+                    <Box sx={{ flex: 1, overflow: "auto" }} data-testid="recent-a2l-list">
                         <Typography variant="caption" sx={{ px: 2, pb: 1, display: "block", color: "#888", mt: 2 }}>RECENT</Typography>
                         <List dense>
                             {recentA2lFiles.map(file => (
                                 <ListItemButton key={file.name + file.lastOpened} onClick={() => {
-                                    handleFileSelect({ name: file.name, path: file.path } as any); 
+                                    if (file.path) handleLoadA2lFromPath(file.path);
                                 }}>
                                     <ListItemIcon sx={{ minWidth: 32 }}><DescriptionIcon fontSize="small" sx={{ fontSize: 16 }} /></ListItemIcon>
                                     <ListItemText 
@@ -885,7 +971,7 @@ function App() {
                 )}
 
                 {metadata && filteredTree && (
-                    <Box sx={{ flex: 1, overflow: "auto" }}>
+                    <Box sx={{ flex: 1, overflow: "auto" }} data-testid="entity-tree">
                         <SimpleTreeView
                             selectedItems={selectedTreeItemId ?? undefined}
                             onSelectedItemsChange={(_, itemIds) => {
@@ -951,10 +1037,10 @@ function App() {
             </>
         )}
         {activeView === "elf" && (
-            <Box sx={{ p: 2 }}>
-                <Typography variant="overline">ELF INSPECTOR</Typography>
+            <Box sx={{ p: 2, overflow: "hidden", overflowY: "auto", flex: 1 }}>
+                <Typography variant="overline" data-testid="heading-elf-inspector">ELF INSPECTOR</Typography>
                 <Divider sx={{ my: 2 }} />
-                <Button variant="outlined" fullWidth startIcon={<FolderOpenIcon />} onClick={handleOpenElfDialog}>
+                <Button data-testid="btn-load-elf" variant="outlined" fullWidth startIcon={<FolderOpenIcon />} onClick={handleOpenElfDialog}>
                     Load ELF Binary
                 </Button>
 
@@ -962,6 +1048,7 @@ function App() {
                     <Box sx={{ mt: 3 }}>
                         <Typography variant="caption" color="text.secondary">TARGET MODULE</Typography>
                         <TextField
+                            data-testid="select-module"
                             select
                             fullWidth
                             size="small"
@@ -980,7 +1067,7 @@ function App() {
                 )}
 
                 {recentElfFiles.length > 0 && (
-                    <Box sx={{ mt: 3 }}>
+                    <Box sx={{ mt: 3 }} data-testid="recent-elf-list">
                          <Typography variant="caption" color="text.secondary">RECENT</Typography>
                          <List dense>
                             {recentElfFiles.map(file => (
@@ -998,7 +1085,7 @@ function App() {
         )}
         {activeView === "settings" && (
              <Box sx={{ p: 2 }}>
-                <Typography variant="overline">SETTINGS</Typography>
+                <Typography variant="overline" data-testid="heading-settings">SETTINGS</Typography>
                 <Divider sx={{ my: 2 }} />
                 <Typography variant="body2" color="text.secondary">No settings available.</Typography>
             </Box>
@@ -1018,7 +1105,19 @@ function App() {
                           {selectedElfSymbols.size > 0 && <Chip label={`${selectedElfSymbols.size} Selected`} size="small" color="primary" sx={{ height: 20 }} />}
                       </Stack>
                       <Stack direction="row" spacing={1}>
+                          {metadata && elfSymbols.length > 0 && (
+                              <Button
+                                  data-testid="btn-update-ecu"
+                                  variant="outlined"
+                                  size="small"
+                                  onClick={handleUpdateEcuAddresses}
+                                  disabled={isBusy}
+                              >
+                                  Update ECU Addresses
+                              </Button>
+                          )}
                           <Button
+                              data-testid="btn-add-to-a2l"
                               variant="contained"
                               disabled={selectedElfSymbols.size === 0 || !metadata}
                               startIcon={<AddIcon />}
@@ -1030,9 +1129,21 @@ function App() {
                       </Stack>
                   </Box>
 
+                  {elfChangedBanner && (
+                      <Alert data-testid="banner-elf-changed" severity="info" sx={{ mx: 2, mt: 1 }} action={
+                          <Stack direction="row" spacing={1}>
+                              <Button size="small" color="inherit" onClick={handleReloadElf}>Reload</Button>
+                              <Button size="small" color="inherit" onClick={() => setElfChangedBanner(false)}>Dismiss</Button>
+                          </Stack>
+                      }>
+                          ELF file changed on disk. Reload to update symbols.
+                      </Alert>
+                  )}
+
                   {elfSymbols.length > 0 && (
                       <Box sx={{ p: 2, px: 3, borderBottom: "1px solid #333", bgcolor: "#252526" }}>
                           <TextField
+                              data-testid="search-elf"
                               fullWidth
                               size="small"
                               placeholder="Search symbols..."
@@ -1045,6 +1156,7 @@ function App() {
                           />
                           <Stack direction="row" spacing={1}>
                               <TextField
+                                  data-testid="filter-type"
                                   select
                                   size="small"
                                   label="Type"
@@ -1058,6 +1170,7 @@ function App() {
                                   {elfTypeOptions.map(type => <MenuItem key={type} value={type}>{type}</MenuItem>)}
                               </TextField>
                               <TextField
+                                  data-testid="filter-section"
                                   select
                                   size="small"
                                   label="Section"
@@ -1071,6 +1184,7 @@ function App() {
                                   {elfSectionOptions.map(section => <MenuItem key={section} value={section}>{section}</MenuItem>)}
                               </TextField>
                               <TextField
+                                  data-testid="filter-bind"
                                   select
                                   size="small"
                                   label="Bind"
@@ -1100,12 +1214,13 @@ function App() {
                   )}
 
                   {elfSymbols.length > 0 ? (
-                      <TableContainer sx={{ flex: 1, overflow: "auto" }}>
+                      <TableContainer sx={{ flex: 1, overflow: "auto" }} data-testid="elf-table">
                           <Table stickyHeader size="small">
                               <TableHead>
                                   <TableRow>
                                       <TableCell padding="checkbox" sx={{ bgcolor: "#1e1e1e" }}>
                                           <Checkbox
+                                              data-testid="checkbox-select-all"
                                               checked={selectedElfSymbols.size === filteredElfSymbols.length && filteredElfSymbols.length > 0}
                                               indeterminate={selectedElfSymbols.size > 0 && selectedElfSymbols.size < filteredElfSymbols.length}
                                               onChange={(e) => {
@@ -1115,37 +1230,38 @@ function App() {
                                               size="small"
                                           />
                                       </TableCell>
-                                      <TableCell sx={{ bgcolor: "#1e1e1e", fontWeight: 600, cursor: "pointer" }} onClick={() => {
+                                      <TableCell data-testid="sort-name" sx={{ bgcolor: "#1e1e1e", fontWeight: 600, cursor: "pointer" }} onClick={() => {
                                           setElfSortColumn('name');
                                           setElfSortDirection(prev => prev === 'asc' ? 'desc' : 'asc');
                                       }}>
                                           Name {elfSortColumn === 'name' && (elfSortDirection === 'asc' ? '↑' : '↓')}
                                       </TableCell>
-                                      <TableCell sx={{ bgcolor: "#1e1e1e", fontWeight: 600, cursor: "pointer" }} onClick={() => {
+                                      <TableCell data-testid="sort-address" sx={{ bgcolor: "#1e1e1e", fontWeight: 600, cursor: "pointer" }} onClick={() => {
                                           setElfSortColumn('address');
                                           setElfSortDirection(prev => prev === 'asc' ? 'desc' : 'asc');
                                       }}>
                                           Address {elfSortColumn === 'address' && (elfSortDirection === 'asc' ? '↑' : '↓')}
                                       </TableCell>
-                                      <TableCell sx={{ bgcolor: "#1e1e1e", fontWeight: 600, cursor: "pointer" }} onClick={() => {
+                                      <TableCell data-testid="sort-size" sx={{ bgcolor: "#1e1e1e", fontWeight: 600, cursor: "pointer" }} onClick={() => {
                                           setElfSortColumn('size');
                                           setElfSortDirection(prev => prev === 'asc' ? 'desc' : 'asc');
                                       }}>
                                           Size {elfSortColumn === 'size' && (elfSortDirection === 'asc' ? '↑' : '↓')}
                                       </TableCell>
-                                      <TableCell sx={{ bgcolor: "#1e1e1e", fontWeight: 600, cursor: "pointer" }} onClick={() => {
+                                      <TableCell data-testid="sort-type" sx={{ bgcolor: "#1e1e1e", fontWeight: 600, cursor: "pointer" }} onClick={() => {
                                           setElfSortColumn('type');
                                           setElfSortDirection(prev => prev === 'asc' ? 'desc' : 'asc');
                                       }}>
                                           ELF Type {elfSortColumn === 'type' && (elfSortDirection === 'asc' ? '↑' : '↓')}
                                       </TableCell>
                                       <TableCell sx={{ bgcolor: "#1e1e1e", fontWeight: 600 }}>A2L Type</TableCell>
+                                      <TableCell sx={{ bgcolor: "#1e1e1e", fontWeight: 600 }}>DWARF Type</TableCell>
                                       <TableCell sx={{ bgcolor: "#1e1e1e", fontWeight: 600 }}>Section</TableCell>
                                   </TableRow>
                               </TableHead>
                               <TableBody>
                                   {filteredElfSymbols.map((row) => (
-                                      <TableRow key={row.name} hover selected={selectedElfSymbols.has(row.name)} onClick={() => {
+                                      <TableRow key={row.name} data-testid={`elf-row-${row.name}`} hover selected={selectedElfSymbols.has(row.name)} onClick={() => {
                                            const next = new Set(selectedElfSymbols);
                                            if (next.has(row.name)) next.delete(row.name);
                                            else next.add(row.name);
@@ -1153,6 +1269,7 @@ function App() {
                                       }} sx={{ cursor: "pointer", bgcolor: row.address_warning ? "rgba(255, 152, 0, 0.08)" : undefined }}>
                                           <TableCell padding="checkbox">
                                               <Checkbox
+                                                  data-testid={`checkbox-elf-${row.name}`}
                                                   checked={selectedElfSymbols.has(row.name)}
                                                   size="small"
                                               />
@@ -1165,6 +1282,10 @@ function App() {
                                           <TableCell sx={{ fontFamily: "monospace", color: "#4ec9b0" }}>0x{row.size.toString(16).toUpperCase()}</TableCell>
                                           <TableCell><Chip label={row.type_str} size="small" variant="outlined" sx={{ height: 16, fontSize: 10 }} /></TableCell>
                                           <TableCell><Chip label={row.suggested_a2l_type} size="small" color="primary" sx={{ height: 16, fontSize: 10 }} /></TableCell>
+                                          <TableCell sx={{ fontFamily: "monospace", color: row.dwarf_type ? "#ce9178" : "#555", fontSize: 11 }}>
+                                              {row.dwarf_type || "—"}
+                                              {row.is_struct_member && <Chip label="member" size="small" sx={{ height: 14, fontSize: 9, ml: 0.5 }} />}
+                                          </TableCell>
                                           <TableCell sx={{ color: "#888" }}>{row.section}</TableCell>
                                       </TableRow>
                                   ))}
@@ -1202,10 +1323,11 @@ function App() {
                 </Stack>
                 <Box sx={{ flex: 1 }} />
                 {!isEditing && ["Measurement", "Characteristic", "AxisPts"].includes(selectedItem.kind) && (
-                     <Button 
-                        startIcon={<EditIcon sx={{ fontSize: 14 }} />} 
-                        size="small" 
-                        variant="contained" 
+                     <Button
+                        data-testid="btn-edit"
+                        startIcon={<EditIcon sx={{ fontSize: 14 }} />}
+                        size="small"
+                        variant="contained"
                         color="primary"
                         sx={{ height: 24, textTransform: "none", fontSize: 11 }}
                         onClick={() => setIsEditing(true)}
@@ -1242,7 +1364,7 @@ function App() {
                         )}
                      </Paper>
                 ) : (
-                    <Box sx={{ maxWidth: 900, mx: "auto", display: "flex", flexDirection: "column", gap: 3 }}>
+                    <Box data-testid="entity-detail" sx={{ maxWidth: 900, mx: "auto", display: "flex", flexDirection: "column", gap: 3 }}>
                        {/* Header Section */}
                        <Stack direction="row" alignItems="center" spacing={2.5}>
                             <Box sx={{ p: 1.5, bgcolor: "rgba(255,255,255,0.05)", borderRadius: 2 }}>
@@ -1328,11 +1450,11 @@ function App() {
                 className="titlebar-no-drag" 
                 sx={{ display: "flex", height: "100%" }}
              >
-                <IconButton size="small" onClick={handleMinimize} sx={{ borderRadius: 0, width: 40, height: "100%", "&:hover":{ bgcolor: "rgba(255,255,255,0.1)"} }}><Minimize sx={{ fontSize: 16 }} /></IconButton>
-                <IconButton size="small" onClick={handleToggleMaximize} sx={{ borderRadius: 0, width: 40, height: "100%", "&:hover":{ bgcolor: "rgba(255,255,255,0.1)"} }}>
+                <IconButton size="small" data-testid="btn-minimize" onClick={handleMinimize} aria-label="Minimize" sx={{ borderRadius: 0, width: 40, height: "100%", "&:hover":{ bgcolor: "rgba(255,255,255,0.1)"} }}><Minimize sx={{ fontSize: 16 }} /></IconButton>
+                <IconButton size="small" data-testid="btn-maximize" onClick={handleToggleMaximize} aria-label="Maximize" sx={{ borderRadius: 0, width: 40, height: "100%", "&:hover":{ bgcolor: "rgba(255,255,255,0.1)"} }}>
                     {isMaximized ? <FilterNone sx={{ fontSize: 14 }} /> : <CropSquare sx={{ fontSize: 14 }} />}
                 </IconButton>
-                <IconButton size="small" onClick={handleClose} sx={{ borderRadius: 0, width: 40, height: "100%", "&:hover":{ bgcolor: "#c42b1c" } }}><CloseIcon sx={{ fontSize: 16 }} /></IconButton>
+                <IconButton size="small" data-testid="btn-close" onClick={handleClose} aria-label="Close" sx={{ borderRadius: 0, width: 40, height: "100%", "&:hover":{ bgcolor: "#c42b1c" } }}><CloseIcon sx={{ fontSize: 16 }} /></IconButton>
              </Box>
         </Box>
 
@@ -1343,10 +1465,11 @@ function App() {
             {renderMainArea()}
         </Box>
 
+        {isBusy && <LinearProgress sx={{ height: 2 }} />}
         <StatusBar status={status} fileName={fileName} elfName={elfFileName} />
 
         {/* Conflict Resolution Dialog */}
-        <Dialog open={showConflictDialog} onClose={() => setShowConflictDialog(false)} maxWidth="md" fullWidth>
+        <Dialog data-testid="dialog-conflict" open={showConflictDialog} onClose={() => setShowConflictDialog(false)} maxWidth="md" fullWidth>
             <DialogTitle>Symbol Import Conflicts</DialogTitle>
             <DialogContent>
                 {conflictReport && (
@@ -1389,7 +1512,7 @@ function App() {
         </Dialog>
 
         {/* Preview Dialog */}
-        <Dialog open={showPreviewDialog} onClose={() => setShowPreviewDialog(false)} maxWidth="lg" fullWidth>
+        <Dialog data-testid="dialog-preview" open={showPreviewDialog} onClose={() => setShowPreviewDialog(false)} maxWidth="lg" fullWidth>
             <DialogTitle>Import Preview - {previewMeasurements.length} symbols selected</DialogTitle>
             <DialogContent>
                 <TableContainer sx={{ maxHeight: 500 }}>

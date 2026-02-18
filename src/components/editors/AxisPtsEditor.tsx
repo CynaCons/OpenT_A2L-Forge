@@ -78,12 +78,13 @@ export function AxisPtsEditor({
   }
 
   return (
-    <Box component="form" sx={{ display: "flex", flexDirection: "column", gap: 3, pt: 1 }}>
+    <Box data-testid="editor-axis-pts" component="form" sx={{ display: "flex", flexDirection: "column", gap: 3, pt: 1 }}>
       {error && <Alert severity="error">{error}</Alert>}
 
       <Grid container spacing={2}>
         <Grid size={{ xs: 12, sm: 6 }}>
           <TextField
+            data-testid="editor-axis-pts-name"
             label="Name"
             fullWidth
             value={data.name}
@@ -181,10 +182,10 @@ export function AxisPtsEditor({
       </Grid>
 
       <Stack direction="row" spacing={2} justifyContent="flex-end">
-        <Button onClick={onCancel} disabled={isSaving}>
+        <Button data-testid="editor-axis-pts-cancel" onClick={onCancel} disabled={isSaving}>
           Cancel
         </Button>
-        <Button variant="contained" onClick={handleSave} disabled={isSaving}>
+        <Button data-testid="editor-axis-pts-save" variant="contained" onClick={handleSave} disabled={isSaving}>
           {isSaving ? "Saving..." : "Save"}
         </Button>
       </Stack>

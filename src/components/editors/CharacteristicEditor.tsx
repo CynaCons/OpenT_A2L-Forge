@@ -85,12 +85,13 @@ export function CharacteristicEditor({
   if (!data) return <Alert severity="warning">No data available</Alert>;
 
   return (
-    <Box sx={{ display: "flex", flexDirection: "column", gap: 3, pt: 1 }}>
+    <Box data-testid="editor-characteristic" sx={{ display: "flex", flexDirection: "column", gap: 3, pt: 1 }}>
       {error && <Alert severity="error">{error}</Alert>}
 
       <Grid container spacing={2}>
         <Grid size={{ xs: 12, sm: 8 }}>
           <TextField
+            data-testid="editor-characteristic-name"
             label="Name"
             value={data.name}
             onChange={(e) => setData({ ...data, name: e.target.value })}
@@ -100,6 +101,7 @@ export function CharacteristicEditor({
         </Grid>
         <Grid size={{ xs: 12, sm: 4 }}>
           <TextField
+            data-testid="editor-characteristic-type"
             select
             label="Type"
             value={data.characteristic_type}
@@ -200,8 +202,8 @@ export function CharacteristicEditor({
       </Grid>
 
       <Stack direction="row" spacing={2} justifyContent="flex-end">
-        <Button onClick={onCancel}>Cancel</Button>
-        <Button variant="contained" onClick={handleSave}>
+        <Button data-testid="editor-characteristic-cancel" onClick={onCancel}>Cancel</Button>
+        <Button data-testid="editor-characteristic-save" variant="contained" onClick={handleSave}>
           Save
         </Button>
       </Stack>

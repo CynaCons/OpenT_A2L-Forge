@@ -1,13 +1,30 @@
 use std::sync::Mutex;
 use std::fs;
+use std::collections::HashMap;
+use std::path::PathBuf;
 use goblin::elf::Elf;
+use notify::{Watcher, RecursiveMode, Event, EventKind};
 
 use serde::{Serialize, Deserialize};
+use tauri::Emitter;
 use a2lfile::{A2lObjectName, A2lObjectNameSetter, Header, ItemList};
 
-#[derive(Default)]
 struct AppState {
     a2l: Mutex<Option<a2lfile::A2lFile>>,
+    elf_path: Mutex<Option<String>>,
+    elf_symbols_cache: Mutex<Vec<ElfSymbol>>,
+    watcher_shutdown: Mutex<Option<std::sync::mpsc::Sender<()>>>,
+}
+
+impl Default for AppState {
+    fn default() -> Self {
+        Self {
+            a2l: Mutex::new(None),
+            elf_path: Mutex::new(None),
+            elf_symbols_cache: Mutex::new(Vec::new()),
+            watcher_shutdown: Mutex::new(None),
+        }
+    }
 }
 
 #[derive(Serialize)]
@@ -909,15 +926,224 @@ fn build_tree(a2l: &a2lfile::A2lFile) -> A2lTree {
     A2lTree { modules }
 }
 
+// ─── Core functions (no Tauri dependency) ────────────────────────────────────
+
+pub fn core_load_a2l_from_string(contents: &str) -> Result<(a2lfile::A2lFile, Vec<String>), String> {
+    let (a2l, warnings) = a2lfile::load_from_string(contents, None, false)
+        .map_err(|error| error.to_string())?;
+    let warning_strings: Vec<String> = warnings.iter().map(|w| w.to_string()).collect();
+    Ok((a2l, warning_strings))
+}
+
+pub fn core_load_a2l_from_path(path: &str) -> Result<(a2lfile::A2lFile, Vec<String>), String> {
+    let contents = fs::read_to_string(path).map_err(|error| error.to_string())?;
+    core_load_a2l_from_string(&contents)
+}
+
+pub fn core_load_elf_symbols(path: &str) -> Result<Vec<ElfSymbol>, String> {
+    let buffer = fs::read(path).map_err(|e| e.to_string())?;
+    core_load_elf_symbols_from_buffer(&buffer)
+}
+
+pub fn core_load_elf_symbols_from_buffer(buffer: &[u8]) -> Result<Vec<ElfSymbol>, String> {
+    let elf = Elf::parse(buffer).map_err(|e| format!("ELF parse error: {}", e))?;
+    let dwarf_info = parse_dwarf_symbols(buffer);
+
+    // Collect symbols from BOTH .symtab and .dynsym for maximum coverage
+    // Each entry is (sym, use_dynstrtab)
+    let mut all_syms: Vec<(goblin::elf::Sym, bool)> = Vec::new();
+    for sym in elf.syms.iter() {
+        all_syms.push((sym, false));
+    }
+    // Also add .dynsym symbols (deduplicated by name later)
+    for sym in elf.dynsyms.iter() {
+        all_syms.push((sym, true));
+    }
+
+    if all_syms.is_empty() {
+        return Ok(Vec::new());
+    }
+
+    let mut symbols = Vec::new();
+    let mut seen_names = std::collections::HashSet::new();
+    for (sym, is_dyn) in &all_syms {
+        let name_opt = if *is_dyn {
+            elf.dynstrtab.get_at(sym.st_name)
+        } else {
+            elf.strtab.get_at(sym.st_name)
+        };
+        if let Some(name) = name_opt {
+            if !name.is_empty() && seen_names.insert(name.to_string()) {
+                let type_str = goblin::elf::sym::type_to_str(sym.st_type()).to_string();
+                let bind = goblin::elf::sym::bind_to_str(sym.st_bind()).to_string();
+
+                let section = if sym.st_shndx < elf.section_headers.len() {
+                    let sh = &elf.section_headers[sym.st_shndx];
+                    elf.shdr_strtab.get_at(sh.sh_name).unwrap_or("").to_string()
+                } else {
+                    "".to_string()
+                };
+
+                let (suggested_type, min_limit, max_limit) = infer_a2l_type(name, sym.st_size);
+                let addr_warning = validate_address(sym.st_value);
+                let dwarf_type = dwarf_info.get(name).map(|info| info.type_name.clone());
+
+                symbols.push(ElfSymbol {
+                    name: name.to_string(),
+                    address: sym.st_value,
+                    size: sym.st_size,
+                    bind: bind.clone(),
+                    type_str: type_str.clone(),
+                    section: section.clone(),
+                    suggested_a2l_type: suggested_type,
+                    suggested_limits: (min_limit, max_limit),
+                    address_warning: addr_warning,
+                    dwarf_type,
+                    is_struct_member: false,
+                    parent_struct: None,
+                });
+
+                if let Some(info) = dwarf_info.get(name) {
+                    if !info.members.is_empty() {
+                        for (member_name, member_offset, member_size, member_type) in &info.members {
+                            let full_name = format!("{}.{}", name, member_name);
+                            let member_addr = sym.st_value + member_offset;
+                            let (member_a2l_type, member_min, member_max) = infer_a2l_type(&full_name, *member_size);
+                            let member_addr_warning = validate_address(member_addr);
+
+                            symbols.push(ElfSymbol {
+                                name: full_name,
+                                address: member_addr,
+                                size: *member_size,
+                                bind: bind.clone(),
+                                type_str: type_str.clone(),
+                                section: section.clone(),
+                                suggested_a2l_type: member_a2l_type,
+                                suggested_limits: (member_min, member_max),
+                                address_warning: member_addr_warning,
+                                dwarf_type: Some(member_type.clone()),
+                                is_struct_member: true,
+                                parent_struct: Some(name.to_string()),
+                            });
+                        }
+                    }
+                }
+            }
+        }
+    }
+    symbols.sort_by(|a, b| a.name.cmp(&b.name));
+    Ok(symbols)
+}
+
+pub fn core_create_measurements(
+    a2l: &mut a2lfile::A2lFile,
+    module_name: Option<&str>,
+    symbols: &[SymbolWithMapping],
+) -> Result<(), String> {
+    let target_module = if let Some(name) = module_name {
+        a2l.project.module.iter_mut().find(|m| m.get_name() == name)
+            .ok_or(format!("Module {} not found", name))?
+    } else {
+        a2l.project.module.iter_mut().next().ok_or("No modules in project")?
+    };
+
+    for sym in symbols {
+        let data_type = parse_data_type(&sym.a2l_type);
+        let mut m = a2lfile::Measurement::new(
+            sym.name.clone(),
+            String::new(),
+            data_type,
+            sym.conversion.clone().unwrap_or_else(|| "NO_COMPU_METHOD".to_string()),
+            sym.resolution.unwrap_or(1),
+            sym.accuracy.unwrap_or(0.0),
+            sym.lower_limit,
+            sym.upper_limit,
+        );
+        m.ecu_address = Some(a2lfile::EcuAddress::new(sym.address as u32));
+        target_module.measurement.retain(|existing| existing.get_name() != sym.name);
+        target_module.measurement.push(m);
+    }
+    Ok(())
+}
+
+pub fn core_check_conflicts(
+    a2l: &a2lfile::A2lFile,
+    module_name: Option<&str>,
+    symbols: &[SymbolWithMapping],
+) -> Result<ConflictReport, String> {
+    let target_module = if let Some(name) = module_name {
+        a2l.project.module.iter().find(|m| m.get_name() == name)
+            .ok_or(format!("Module {} not found", name))?
+    } else {
+        a2l.project.module.first().ok_or("No modules in project")?
+    };
+
+    let mut conflicts = Vec::new();
+    let mut non_conflicts = Vec::new();
+
+    for sym in symbols {
+        if let Some(existing) = target_module.measurement.iter().find(|m| m.get_name() == sym.name) {
+            conflicts.push(SymbolConflict {
+                symbol_name: sym.name.clone(),
+                existing_address: format!("0x{:X}",
+                    existing.ecu_address.as_ref().map(|a| a.address).unwrap_or(0)),
+                existing_type: format!("{:?}", existing.datatype),
+                new_address: format!("0x{:X}", sym.address as u32),
+                new_type: sym.a2l_type.clone(),
+            });
+        } else {
+            non_conflicts.push(sym.name.clone());
+        }
+    }
+
+    Ok(ConflictReport { conflicts, non_conflicts })
+}
+
+pub fn core_update_ecu_addresses(
+    a2l: &mut a2lfile::A2lFile,
+    module_name: Option<&str>,
+    elf_symbols: &[ElfSymbol],
+) -> Result<UpdateEcuAddressesResult, String> {
+    let sym_map: HashMap<&str, u64> = elf_symbols.iter()
+        .map(|s| (s.name.as_str(), s.address))
+        .collect();
+
+    let target_module = if let Some(name) = module_name {
+        a2l.project.module.iter_mut().find(|m| m.get_name() == name)
+            .ok_or(format!("Module {} not found", name))?
+    } else {
+        a2l.project.module.iter_mut().next().ok_or("No modules in project")?
+    };
+
+    let mut updated_count = 0usize;
+    let mut matched_names = Vec::new();
+
+    for measurement in target_module.measurement.iter_mut() {
+        let meas_name = measurement.get_name().to_string();
+        if let Some(&addr) = sym_map.get(meas_name.as_str()) {
+            measurement.ecu_address = Some(a2lfile::EcuAddress::new(addr as u32));
+            updated_count += 1;
+            matched_names.push(meas_name);
+        }
+    }
+
+    Ok(UpdateEcuAddressesResult { updated_count, matched_names })
+}
+
+pub fn core_export_a2l(a2l: &a2lfile::A2lFile) -> String {
+    a2l.write_to_string()
+}
+
+// ─── Tauri command wrappers ──────────────────────────────────────────────────
+
 #[tauri::command]
 fn load_a2l_from_string(
     contents: String,
     state: tauri::State<AppState>,
 ) -> Result<A2lMetadata, String> {
-    let (a2l, warnings) = a2lfile::load_from_string(&contents, None, false)
-        .map_err(|error| error.to_string())?;
-
-    let metadata = build_metadata(&a2l, warnings.len());
+    let (a2l, warnings) = core_load_a2l_from_string(&contents)?;
+    let warning_count = warnings.len();
+    let metadata = build_metadata(&a2l, warning_count);
     *state.a2l.lock().map_err(|_| "State lock poisoned")? = Some(a2l);
 
     Ok(metadata)
@@ -960,7 +1186,7 @@ fn update_project_metadata(
 fn export_a2l(state: tauri::State<AppState>) -> Result<String, String> {
     let guard = state.a2l.lock().map_err(|_| "State lock poisoned")?;
     let a2l = guard.as_ref().ok_or("No A2L loaded")?;
-    Ok(a2l.write_to_string())
+    Ok(core_export_a2l(a2l))
 }
 
 #[tauri::command]
@@ -1320,17 +1546,20 @@ fn update_axis_pts(name: String, data: AxisPtsData, state: tauri::State<AppState
     Err(format!("AxisPts '{}' not found", name))
 }
 
-#[derive(Serialize, Deserialize, Clone)]
-struct ElfSymbol {
-    name: String,
-    address: u64,
-    size: u64,
-    bind: String,
-    type_str: String,
-    section: String,
-    suggested_a2l_type: String,
-    suggested_limits: (f64, f64),
-    address_warning: Option<String>,
+#[derive(Serialize, Deserialize, Clone, Debug)]
+pub struct ElfSymbol {
+    pub name: String,
+    pub address: u64,
+    pub size: u64,
+    pub bind: String,
+    pub type_str: String,
+    pub section: String,
+    pub suggested_a2l_type: String,
+    pub suggested_limits: (f64, f64),
+    pub address_warning: Option<String>,
+    pub dwarf_type: Option<String>,
+    pub is_struct_member: bool,
+    pub parent_struct: Option<String>,
 }
 
 // Type inference based on symbol size and name heuristics
@@ -1395,57 +1624,317 @@ fn validate_address(address: u64) -> Option<String> {
     }
 }
 
-#[tauri::command]
-fn load_elf_symbols(path: String) -> Result<Vec<ElfSymbol>, String> {
-    let buffer = fs::read(&path).map_err(|e| e.to_string())?;
-    let elf = Elf::parse(&buffer).map_err(|e| e.to_string())?;
+/// Information extracted from DWARF debug info for a symbol
+#[derive(Clone, Debug)]
+struct DwarfSymbolInfo {
+    type_name: String,
+    /// For struct members: (member_name, offset, size, type_name)
+    members: Vec<(String, u64, u64, String)>,
+}
 
-    let mut symbols = Vec::new();
-    for sym in elf.syms.iter() {
-        if let Some(name) = elf.strtab.get_at(sym.st_name) {
-            if !name.is_empty() {
-                 // goblin 0.8+ returns &str directly, not Option
-                 let type_str = goblin::elf::sym::type_to_str(sym.st_type()).to_string();
-                 let bind = goblin::elf::sym::bind_to_str(sym.st_bind()).to_string();
+/// Parse DWARF debug info from an ELF buffer to extract type information.
+/// Returns a map of symbol name -> DwarfSymbolInfo.
+fn parse_dwarf_symbols(buffer: &[u8]) -> HashMap<String, DwarfSymbolInfo> {
+    let mut result = HashMap::new();
 
-                 let section = if sym.st_shndx < elf.section_headers.len() {
-                    let sh = &elf.section_headers[sym.st_shndx];
-                     elf.shdr_strtab.get_at(sh.sh_name).unwrap_or("").to_string()
-                 } else {
-                    "".to_string()
-                 };
+    // Try to load DWARF sections from the ELF
+    let elf = match goblin::elf::Elf::parse(buffer) {
+        Ok(elf) => elf,
+        Err(_) => return result,
+    };
 
-                 let (suggested_type, min_limit, max_limit) = infer_a2l_type(name, sym.st_size);
-                 let addr_warning = validate_address(sym.st_value);
+    // Build a section-name-to-data map
+    let section_data = |name: &str| -> Option<&[u8]> {
+        for sh in &elf.section_headers {
+            if let Some(section_name) = elf.shdr_strtab.get_at(sh.sh_name) {
+                if section_name == name {
+                    let start = sh.sh_offset as usize;
+                    let end = start + sh.sh_size as usize;
+                    if end <= buffer.len() {
+                        return Some(&buffer[start..end]);
+                    }
+                }
+            }
+        }
+        None
+    };
 
-                 symbols.push(ElfSymbol {
-                     name: name.to_string(),
-                     address: sym.st_value,
-                     size: sym.st_size,
-                     bind,
-                     type_str,
-                     section,
-                     suggested_a2l_type: suggested_type,
-                     suggested_limits: (min_limit, max_limit),
-                     address_warning: addr_warning,
-                 });
+    let debug_info = match section_data(".debug_info") {
+        Some(d) => d,
+        None => return result,
+    };
+    let debug_abbrev = match section_data(".debug_abbrev") {
+        Some(d) => d,
+        None => return result,
+    };
+    let debug_str = section_data(".debug_str").unwrap_or(&[]);
+
+    let dwarf = gimli::Dwarf {
+        debug_info: gimli::DebugInfo::new(debug_info, gimli::LittleEndian),
+        debug_abbrev: gimli::DebugAbbrev::new(debug_abbrev, gimli::LittleEndian),
+        debug_str: gimli::DebugStr::new(debug_str, gimli::LittleEndian),
+        ..Default::default()
+    };
+
+    // Build a type offset -> type name map
+    let mut type_map: HashMap<gimli::DebugInfoOffset, String> = HashMap::new();
+    // Build a struct type offset -> members map
+    let mut struct_members: HashMap<gimli::DebugInfoOffset, Vec<(String, u64, u64, String)>> = HashMap::new();
+
+    // First pass: collect type names and struct members
+    let mut units = dwarf.units();
+    while let Ok(Some(header)) = units.next() {
+        let unit = match dwarf.unit(header) {
+            Ok(u) => u,
+            Err(_) => continue,
+        };
+
+        let mut entries = unit.entries();
+        while let Ok(Some((_, entry))) = entries.next_dfs() {
+            let offset = entry.offset().to_debug_info_offset(&unit.header).unwrap_or(gimli::DebugInfoOffset(0));
+
+            match entry.tag() {
+                gimli::DW_TAG_base_type | gimli::DW_TAG_typedef => {
+                    if let Some(name) = get_die_name(&dwarf, &unit, entry) {
+                        type_map.insert(offset, name);
+                    }
+                }
+                gimli::DW_TAG_structure_type => {
+                    if let Some(name) = get_die_name(&dwarf, &unit, entry) {
+                        type_map.insert(offset, format!("struct {}", name));
+                    }
+                }
+                gimli::DW_TAG_pointer_type => {
+                    type_map.insert(offset, "pointer".to_string());
+                }
+                gimli::DW_TAG_array_type => {
+                    type_map.insert(offset, "array".to_string());
+                }
+                _ => {}
             }
         }
     }
-    symbols.sort_by(|a, b| a.name.cmp(&b.name));
+
+    // Second pass: resolve struct members and variable types
+    let mut units2 = dwarf.units();
+    while let Ok(Some(header)) = units2.next() {
+        let unit = match dwarf.unit(header) {
+            Ok(u) => u,
+            Err(_) => continue,
+        };
+
+        let mut entries = unit.entries();
+        let mut current_struct_offset: Option<gimli::DebugInfoOffset> = None;
+        let mut depth: isize = 0;
+        let mut struct_depth: isize = 0;
+
+        while let Ok(Some((delta, entry))) = entries.next_dfs() {
+            depth += delta;
+
+            match entry.tag() {
+                gimli::DW_TAG_structure_type => {
+                    let offset = entry.offset().to_debug_info_offset(&unit.header).unwrap_or(gimli::DebugInfoOffset(0));
+                    current_struct_offset = Some(offset);
+                    struct_depth = depth;
+                    if !struct_members.contains_key(&offset) {
+                        struct_members.insert(offset, Vec::new());
+                    }
+                }
+                gimli::DW_TAG_member if current_struct_offset.is_some() && depth == struct_depth + 1 => {
+                    if let Some(struct_off) = current_struct_offset {
+                        if let Some(member_name) = get_die_name(&dwarf, &unit, entry) {
+                            let member_offset = get_member_location(entry);
+                            let member_type = resolve_type_to_offset(&unit, entry)
+                                .and_then(|off| type_map.get(&off))
+                                .cloned()
+                                .unwrap_or_else(|| "unknown".to_string());
+                            let member_size = get_byte_size(entry).unwrap_or(0);
+
+                            struct_members.entry(struct_off).or_default().push(
+                                (member_name, member_offset, member_size, member_type)
+                            );
+                        }
+                    }
+                }
+                gimli::DW_TAG_variable => {
+                    if let Some(var_name) = get_die_name(&dwarf, &unit, entry) {
+                        let type_name = resolve_type_to_offset(&unit, entry)
+                            .and_then(|off| {
+                                // If it's a struct, include member info
+                                if let Some(members) = struct_members.get(&off) {
+                                    let base_type = type_map.get(&off).cloned().unwrap_or_default();
+                                    result.insert(var_name.clone(), DwarfSymbolInfo {
+                                        type_name: base_type,
+                                        members: members.clone(),
+                                    });
+                                }
+                                type_map.get(&off).cloned()
+                            })
+                            .unwrap_or_else(|| "unknown".to_string());
+
+                        result.entry(var_name).or_insert(DwarfSymbolInfo {
+                            type_name,
+                            members: Vec::new(),
+                        });
+                    }
+                }
+                _ => {
+                    if depth <= struct_depth && current_struct_offset.is_some() {
+                        current_struct_offset = None;
+                    }
+                }
+            }
+        }
+    }
+
+    result
+}
+
+fn get_die_name(
+    dwarf: &gimli::Dwarf<gimli::EndianSlice<gimli::LittleEndian>>,
+    unit: &gimli::Unit<gimli::EndianSlice<gimli::LittleEndian>>,
+    entry: &gimli::DebuggingInformationEntry<gimli::EndianSlice<gimli::LittleEndian>>,
+) -> Option<String> {
+    entry.attr_value(gimli::DW_AT_name).ok().flatten().and_then(|val| {
+        dwarf.attr_string(unit, val).ok().map(|s| {
+            s.to_string_lossy().into_owned()
+        })
+    })
+}
+
+fn resolve_type_to_offset(
+    unit: &gimli::Unit<gimli::EndianSlice<gimli::LittleEndian>>,
+    entry: &gimli::DebuggingInformationEntry<gimli::EndianSlice<gimli::LittleEndian>>,
+) -> Option<gimli::DebugInfoOffset> {
+    let val = entry.attr_value(gimli::DW_AT_type).ok().flatten()?;
+    match val {
+        gimli::AttributeValue::UnitRef(offset) => {
+            offset.to_debug_info_offset(&unit.header)
+        }
+        gimli::AttributeValue::DebugInfoRef(offset) => Some(offset),
+        _ => None,
+    }
+}
+
+fn get_member_location(
+    entry: &gimli::DebuggingInformationEntry<gimli::EndianSlice<gimli::LittleEndian>>,
+) -> u64 {
+    entry.attr_value(gimli::DW_AT_data_member_location).ok().flatten()
+        .and_then(|val| match val {
+            gimli::AttributeValue::Udata(v) => Some(v),
+            gimli::AttributeValue::Sdata(v) => Some(v as u64),
+            _ => None,
+        })
+        .unwrap_or(0)
+}
+
+fn get_byte_size(
+    entry: &gimli::DebuggingInformationEntry<gimli::EndianSlice<gimli::LittleEndian>>,
+) -> Option<u64> {
+    entry.attr_value(gimli::DW_AT_byte_size).ok().flatten()
+        .and_then(|val| match val {
+            gimli::AttributeValue::Udata(v) => Some(v),
+            gimli::AttributeValue::Sdata(v) => Some(v as u64),
+            _ => None,
+        })
+}
+
+#[tauri::command]
+fn load_elf_symbols(
+    path: String,
+    app_handle: tauri::AppHandle,
+    state: tauri::State<AppState>,
+) -> Result<Vec<ElfSymbol>, String> {
+    // Stop any existing file watcher
+    if let Ok(mut shutdown) = state.watcher_shutdown.lock() {
+        if let Some(tx) = shutdown.take() {
+            let _ = tx.send(());
+        }
+    }
+
+    // Store the ELF path
+    if let Ok(mut elf_path) = state.elf_path.lock() {
+        *elf_path = Some(path.clone());
+    }
+
+    let symbols = core_load_elf_symbols(&path)?;
+
+    // Cache symbols
+    if let Ok(mut cache) = state.elf_symbols_cache.lock() {
+        *cache = symbols.clone();
+    }
+
+    // Spawn file watcher
+    let watch_path = path.clone();
+    let (shutdown_tx, shutdown_rx) = std::sync::mpsc::channel::<()>();
+    if let Ok(mut shutdown) = state.watcher_shutdown.lock() {
+        *shutdown = Some(shutdown_tx);
+    }
+
+    std::thread::spawn(move || {
+        let (tx, rx) = std::sync::mpsc::channel::<notify::Result<Event>>();
+        let mut watcher = match notify::recommended_watcher(tx) {
+            Ok(w) => w,
+            Err(_) => return,
+        };
+        if watcher.watch(&PathBuf::from(&watch_path), RecursiveMode::NonRecursive).is_err() {
+            return;
+        }
+
+        loop {
+            // Check for shutdown signal
+            if shutdown_rx.try_recv().is_ok() {
+                break;
+            }
+
+            match rx.recv_timeout(std::time::Duration::from_millis(500)) {
+                Ok(Ok(event)) => {
+                    if matches!(event.kind, EventKind::Modify(_)) {
+                        let _ = app_handle.emit("elf-changed", &watch_path);
+                    }
+                }
+                Ok(Err(_)) => break,
+                Err(std::sync::mpsc::RecvTimeoutError::Disconnected) => break,
+                Err(std::sync::mpsc::RecvTimeoutError::Timeout) => continue,
+            }
+        }
+    });
+
     Ok(symbols)
 }
 
-#[derive(Serialize, Deserialize)]
-struct SymbolWithMapping {
-    name: String,
-    address: u64,
-    a2l_type: String,
-    lower_limit: f64,
-    upper_limit: f64,
-    conversion: Option<String>,
-    resolution: Option<u16>,
-    accuracy: Option<f64>,
+#[derive(Serialize, Deserialize, Clone, Debug)]
+pub struct UpdateEcuAddressesResult {
+    pub updated_count: usize,
+    pub matched_names: Vec<String>,
+}
+
+#[tauri::command]
+fn update_ecu_addresses(
+    module_name: Option<String>,
+    state: tauri::State<AppState>,
+) -> Result<UpdateEcuAddressesResult, String> {
+    let elf_symbols = state.elf_symbols_cache.lock().map_err(|_| "Lock poisoned")?;
+    if elf_symbols.is_empty() {
+        return Err("No ELF symbols loaded".to_string());
+    }
+
+    let mut guard = state.a2l.lock().map_err(|_| "State lock poisoned")?;
+    let a2l = guard.as_mut().ok_or("No A2L loaded")?;
+
+    core_update_ecu_addresses(a2l, module_name.as_deref(), &elf_symbols)
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug)]
+pub struct SymbolWithMapping {
+    pub name: String,
+    pub address: u64,
+    pub a2l_type: String,
+    pub lower_limit: f64,
+    pub upper_limit: f64,
+    pub conversion: Option<String>,
+    pub resolution: Option<u16>,
+    pub accuracy: Option<f64>,
 }
 
 // Helper to parse A2L data type from string
@@ -1489,19 +1978,19 @@ fn create_measurements_from_elf(
     create_measurements_with_mapping(module_name, mapped_symbols, state)
 }
 
-#[derive(Serialize, Deserialize)]
-struct SymbolConflict {
-    symbol_name: String,
-    existing_address: String,
-    existing_type: String,
-    new_address: String,
-    new_type: String,
+#[derive(Serialize, Deserialize, Clone, Debug)]
+pub struct SymbolConflict {
+    pub symbol_name: String,
+    pub existing_address: String,
+    pub existing_type: String,
+    pub new_address: String,
+    pub new_type: String,
 }
 
-#[derive(Serialize, Deserialize)]
-struct ConflictReport {
-    conflicts: Vec<SymbolConflict>,
-    non_conflicts: Vec<String>,
+#[derive(Serialize, Deserialize, Clone, Debug)]
+pub struct ConflictReport {
+    pub conflicts: Vec<SymbolConflict>,
+    pub non_conflicts: Vec<String>,
 }
 
 // Check for symbol conflicts before importing
@@ -1513,33 +2002,7 @@ fn check_symbol_conflicts(
 ) -> Result<ConflictReport, String> {
     let guard = state.a2l.lock().map_err(|_| "State lock poisoned")?;
     let a2l = guard.as_ref().ok_or("No A2L loaded")?;
-
-    let target_module = if let Some(name) = &module_name {
-        a2l.project.module.iter().find(|m| m.get_name() == name)
-            .ok_or(format!("Module {} not found", name))?
-    } else {
-        a2l.project.module.first().ok_or("No modules in project")?
-    };
-
-    let mut conflicts = Vec::new();
-    let mut non_conflicts = Vec::new();
-
-    for sym in symbols {
-        if let Some(existing) = target_module.measurement.iter().find(|m| m.get_name() == sym.name) {
-            conflicts.push(SymbolConflict {
-                symbol_name: sym.name.clone(),
-                existing_address: format!("0x{:X}",
-                    existing.ecu_address.as_ref().map(|a| a.address).unwrap_or(0)),
-                existing_type: format!("{:?}", existing.datatype),
-                new_address: format!("0x{:X}", sym.address as u32),
-                new_type: sym.a2l_type.clone(),
-            });
-        } else {
-            non_conflicts.push(sym.name.clone());
-        }
-    }
-
-    Ok(ConflictReport { conflicts, non_conflicts })
+    core_check_conflicts(a2l, module_name.as_deref(), &symbols)
 }
 
 // Enhanced command with custom type mapping
@@ -1552,28 +2015,7 @@ fn create_measurements_with_mapping(
     let mut guard = state.a2l.lock().map_err(|_| "State lock poisoned")?;
     let a2l = guard.as_mut().ok_or("No A2L loaded")?;
 
-    let target_module = if let Some(name) = module_name {
-        a2l.project.module.iter_mut().find(|m| m.get_name() == name)
-            .ok_or(format!("Module {} not found", name))?
-    } else {
-        a2l.project.module.iter_mut().next().ok_or("No modules in project")?
-    };
-
-    for sym in symbols {
-        let data_type = parse_data_type(&sym.a2l_type);
-        let mut m = a2lfile::Measurement::new(
-            sym.name.clone(),
-            String::new(), // long_identifier
-            data_type,
-            sym.conversion.unwrap_or_else(|| "NO_COMPU_METHOD".to_string()),
-            sym.resolution.unwrap_or(1),
-            sym.accuracy.unwrap_or(0.0),
-            sym.lower_limit,
-            sym.upper_limit,
-        );
-        m.ecu_address = Some(a2lfile::EcuAddress::new(sym.address as u32));
-        target_module.measurement.push(m);
-    }
+    core_create_measurements(a2l, module_name.as_deref(), &symbols)?;
 
     Ok(EntityUpdateResult {
         metadata: build_metadata(a2l, 0),
@@ -1606,7 +2048,8 @@ pub fn run() {
             load_elf_symbols,
             create_measurements_from_elf,
             create_measurements_with_mapping,
-            check_symbol_conflicts
+            check_symbol_conflicts,
+            update_ecu_addresses
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

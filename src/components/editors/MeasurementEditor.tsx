@@ -87,12 +87,13 @@ export function MeasurementEditor({
   if (!data) return <Alert severity="warning">No data available</Alert>;
 
   return (
-    <Box sx={{ display: "flex", flexDirection: "column", gap: 3, pt: 1 }}>
+    <Box data-testid="editor-measurement" sx={{ display: "flex", flexDirection: "column", gap: 3, pt: 1 }}>
       {error && <Alert severity="error">{error}</Alert>}
-      
+
       <Grid container spacing={2}>
         <Grid size={{ xs: 12, sm: 8 }}>
           <TextField
+            data-testid="editor-measurement-name"
             label="Name"
             value={data.name}
             onChange={(e) => setData({ ...data, name: e.target.value })}
@@ -102,6 +103,7 @@ export function MeasurementEditor({
         </Grid>
         <Grid size={{ xs: 12, sm: 4 }}>
           <TextField
+            data-testid="editor-measurement-datatype"
             select
             label="Data Type"
             value={data.datatype}
@@ -119,6 +121,7 @@ export function MeasurementEditor({
 
         <Grid size={{ xs: 12 }}>
           <TextField
+            data-testid="editor-measurement-long-id"
             label="Long Identifier"
             value={data.long_identifier}
             onChange={(e) => setData({ ...data, long_identifier: e.target.value })}
@@ -131,6 +134,7 @@ export function MeasurementEditor({
 
         <Grid size={{ xs: 12, sm: 6 }}>
           <TextField
+            data-testid="editor-measurement-lower-limit"
             label="Lower Limit"
             type="number"
             value={data.lower_limit}
@@ -141,6 +145,7 @@ export function MeasurementEditor({
         </Grid>
         <Grid size={{ xs: 12, sm: 6 }}>
           <TextField
+            data-testid="editor-measurement-upper-limit"
             label="Upper Limit"
             type="number"
             value={data.upper_limit}
@@ -152,6 +157,7 @@ export function MeasurementEditor({
 
         <Grid size={{ xs: 12, sm: 6 }}>
           <TextField
+            data-testid="editor-measurement-resolution"
             label="Resolution"
             type="number"
             value={data.resolution}
@@ -162,6 +168,7 @@ export function MeasurementEditor({
         </Grid>
         <Grid size={{ xs: 12, sm: 6 }}>
           <TextField
+            data-testid="editor-measurement-accuracy"
             label="Accuracy"
             type="number"
             value={data.accuracy}
@@ -173,6 +180,7 @@ export function MeasurementEditor({
 
         <Grid size={{ xs: 12 }}>
            <TextField
+            data-testid="editor-measurement-conversion"
             label="Conversion"
             value={data.conversion}
             onChange={(e) => setData({ ...data, conversion: e.target.value })}
@@ -180,9 +188,10 @@ export function MeasurementEditor({
             fullWidth
           />
         </Grid>
-        
+
         <Grid size={{ xs: 12 }}>
            <TextField
+            data-testid="editor-measurement-ecu-address"
             label="ECU Address (Hex)"
             value={data.ecu_address ?? ""}
             onChange={(e) => setData({ ...data, ecu_address: e.target.value })}
@@ -194,8 +203,8 @@ export function MeasurementEditor({
       </Grid>
 
       <Stack direction="row" spacing={2} justifyContent="flex-end">
-        <Button onClick={onCancel}>Cancel</Button>
-        <Button variant="contained" onClick={handleSave}>
+        <Button data-testid="editor-measurement-cancel" onClick={onCancel}>Cancel</Button>
+        <Button data-testid="editor-measurement-save" variant="contained" onClick={handleSave}>
           Save
         </Button>
       </Stack>
