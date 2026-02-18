@@ -313,6 +313,7 @@ function App() {
   const [elfFilterBinds, setElfFilterBinds] = useState<Set<string>>(new Set());
   const [elfSortColumn, setElfSortColumn] = useState<'name' | 'address' | 'size' | 'type'>('name');
   const [elfSortDirection, setElfSortDirection] = useState<'asc' | 'desc'>('asc');
+  const [collapsedStructs, setCollapsedStructs] = useState<Set<string>>(new Set());
   const [selectedModule, setSelectedModule] = useState<string | null>(null);
   const [showConflictDialog, setShowConflictDialog] = useState(false);
   const [conflictReport, setConflictReport] = useState<ConflictReport | null>(null);
@@ -409,6 +410,53 @@ function App() {
 
     return result;
   }, [elfSymbols, elfSearchQuery, elfFilterTypes, elfFilterSections, elfFilterBinds, elfSortColumn, elfSortDirection]);
+
+  // Names of all symbols that act as struct parents (have at least one member child across ALL loaded symbols)
+  const structParentNames = useMemo(() => {
+    const parents = new Set<string>();
+    elfSymbols.forEach(s => {
+      if (s.is_struct_member && s.parent_struct) parents.add(s.parent_struct);
+    });
+    return parents;
+  }, [elfSymbols]);
+
+  // Display rows: struct members are grouped under their parent with indentation.
+  // When a struct parent is collapsed its children are hidden.
+  const elfDisplayRows = useMemo(() => {
+    const membersByParent = new Map<string, ElfSymbol[]>();
+    const topLevelRows: ElfSymbol[] = [];
+
+    for (const sym of filteredElfSymbols) {
+      if (sym.is_struct_member && sym.parent_struct) {
+        if (!membersByParent.has(sym.parent_struct)) membersByParent.set(sym.parent_struct, []);
+        membersByParent.get(sym.parent_struct)!.push(sym);
+      } else {
+        topLevelRows.push(sym);
+      }
+    }
+
+    const rows: ElfSymbol[] = [];
+    const insertedParents = new Set<string>();
+    for (const sym of topLevelRows) {
+      rows.push(sym);
+      insertedParents.add(sym.name);
+      if (structParentNames.has(sym.name) && !collapsedStructs.has(sym.name)) {
+        const members = membersByParent.get(sym.name) ?? [];
+        rows.push(...members);
+      }
+    }
+    // Orphaned members whose parent was filtered out — still show them
+    for (const [parentName, members] of membersByParent) {
+      if (!insertedParents.has(parentName)) rows.push(...members);
+    }
+    return rows;
+  }, [filteredElfSymbols, structParentNames, collapsedStructs]);
+
+  // Selectable symbols are non-struct-parent rows (struct parents cannot be added as scalar A2L entries)
+  const selectableDisplayRows = useMemo(
+    () => elfDisplayRows.filter(s => !structParentNames.has(s.name)),
+    [elfDisplayRows, structParentNames],
+  );
 
   // Get unique values for filter dropdowns
   const elfTypeOptions = useMemo(() => [...new Set(elfSymbols.map(s => s.type_str))].sort(), [elfSymbols]);
@@ -747,7 +795,7 @@ function App() {
       }
 
       // Prepare symbols with type mappings
-      const toAdd = filteredElfSymbols.filter(s => selectedElfSymbols.has(s.name));
+      const toAdd = elfDisplayRows.filter(s => selectedElfSymbols.has(s.name));
       const symbolsWithMapping: SymbolWithMapping[] = toAdd.map(s => ({
           name: s.name,
           address: s.address,
@@ -1175,8 +1223,7 @@ function App() {
                           <MemoryIcon sx={{ color: "#4ec9b0" }} />
                           <Typography variant="h6" sx={{ fontSize: 14 }}>ELF Symbols</Typography>
                           {elfSymbols.length > 0 && <Chip label={`${filteredElfSymbols.length} of ${elfSymbols.length}`} size="small" variant="outlined" sx={{ height: 20 }} />}
-                          {selectedElfSymbols.size > 0 && <Chip label={`${selectedElfSymbols.size} Selected`} size="small" color="primary" sx={{ height: 20 }} />}
-                      </Stack>
+                          {selectedElfSymbols.size > 0 && <Chip label={`${selectedElfSymbols.size} Selected`} size="small" color="primary" sx={{ height: 20 }} />}                      </Stack>
                       <Stack direction="row" spacing={1}>
                           {metadata && elfSymbols.length > 0 && (
                               <Button
@@ -1298,10 +1345,10 @@ function App() {
                                       <TableCell padding="checkbox" sx={{ bgcolor: "#1e1e1e" }}>
                                           <Checkbox
                                               data-testid="checkbox-select-all"
-                                              checked={selectedElfSymbols.size === filteredElfSymbols.length && filteredElfSymbols.length > 0}
-                                              indeterminate={selectedElfSymbols.size > 0 && selectedElfSymbols.size < filteredElfSymbols.length}
+                                              checked={selectableDisplayRows.length > 0 && selectableDisplayRows.every(s => selectedElfSymbols.has(s.name))}
+                                              indeterminate={selectableDisplayRows.some(s => selectedElfSymbols.has(s.name)) && !selectableDisplayRows.every(s => selectedElfSymbols.has(s.name))}
                                               onChange={(e) => {
-                                                  if (e.target.checked) setSelectedElfSymbols(new Set(filteredElfSymbols.map(s => s.name)));
+                                                  if (e.target.checked) setSelectedElfSymbols(new Set(selectableDisplayRows.map(s => s.name)));
                                                   else setSelectedElfSymbols(new Set());
                                               }}
                                               size="small"
@@ -1337,35 +1384,103 @@ function App() {
                                   </TableRow>
                               </TableHead>
                               <TableBody>
-                                  {filteredElfSymbols.map((row) => (
-                                      <TableRow key={row.name} data-testid={`elf-row-${row.name}`} hover selected={selectedElfSymbols.has(row.name)} onClick={() => {
-                                           const next = new Set(selectedElfSymbols);
-                                           if (next.has(row.name)) next.delete(row.name);
-                                           else next.add(row.name);
-                                           setSelectedElfSymbols(next);
-                                      }} sx={{ cursor: "pointer", bgcolor: row.address_warning ? "rgba(255, 152, 0, 0.08)" : undefined }}>
-                                          <TableCell padding="checkbox">
-                                              <Checkbox
-                                                  data-testid={`checkbox-elf-${row.name}`}
-                                                  checked={selectedElfSymbols.has(row.name)}
-                                                  size="small"
-                                              />
-                                          </TableCell>
-                                          <TableCell sx={{ fontFamily: "monospace" }}>{row.name}</TableCell>
-                                          <TableCell sx={{ fontFamily: "monospace", color: "#4ec9b0" }}>
-                                              0x{row.address.toString(16).toUpperCase()}
-                                              {row.address_warning && <span style={{ color: "#ff9800", marginLeft: 4 }}>⚠</span>}
-                                          </TableCell>
-                                          <TableCell sx={{ fontFamily: "monospace", color: "#4ec9b0" }}>0x{row.size.toString(16).toUpperCase()}</TableCell>
-                                          <TableCell><Chip label={row.type_str} size="small" variant="outlined" sx={{ height: 16, fontSize: 10 }} /></TableCell>
-                                          <TableCell><Chip label={row.suggested_a2l_type} size="small" color="primary" sx={{ height: 16, fontSize: 10 }} /></TableCell>
-                                          <TableCell sx={{ fontFamily: "monospace", color: row.dwarf_type ? "#ce9178" : "#555", fontSize: 11 }}>
-                                              {row.dwarf_type || "—"}
-                                              {row.is_struct_member && <Chip label="member" size="small" sx={{ height: 14, fontSize: 9, ml: 0.5 }} />}
-                                          </TableCell>
-                                          <TableCell sx={{ color: "#888" }}>{row.section}</TableCell>
-                                      </TableRow>
-                                  ))}
+                                  {elfDisplayRows.map((row) => {
+                                      const isStructParent = structParentNames.has(row.name);
+                                      if (isStructParent) {
+                                          // Struct parent row: expand/collapse, not directly selectable
+                                          const isCollapsed = collapsedStructs.has(row.name);
+                                          const memberCount = elfSymbols.filter(s => s.parent_struct === row.name).length;
+                                          const allMembersSelected = elfSymbols
+                                              .filter(s => s.parent_struct === row.name)
+                                              .every(s => selectedElfSymbols.has(s.name));
+                                          const someMembersSelected = elfSymbols
+                                              .filter(s => s.parent_struct === row.name)
+                                              .some(s => selectedElfSymbols.has(s.name));
+                                          return (
+                                              <TableRow
+                                                  key={row.name}
+                                                  data-testid={`elf-row-${row.name}`}
+                                                  sx={{ cursor: "pointer", bgcolor: "rgba(78,201,176,0.06)", "&:hover": { bgcolor: "rgba(78,201,176,0.10)" } }}
+                                                  onClick={() => {
+                                                      setCollapsedStructs(prev => {
+                                                          const next = new Set(prev);
+                                                          if (next.has(row.name)) next.delete(row.name);
+                                                          else next.add(row.name);
+                                                          return next;
+                                                      });
+                                                  }}
+                                              >
+                                                  <TableCell padding="checkbox" onClick={e => e.stopPropagation()}>
+                                                      <Checkbox
+                                                          data-testid={`checkbox-elf-${row.name}`}
+                                                          checked={allMembersSelected && someMembersSelected}
+                                                          indeterminate={someMembersSelected && !allMembersSelected}
+                                                          size="small"
+                                                          onChange={(e) => {
+                                                              const members = elfSymbols.filter(s => s.parent_struct === row.name).map(s => s.name);
+                                                              const next = new Set(selectedElfSymbols);
+                                                              if (e.target.checked) members.forEach(n => next.add(n));
+                                                              else members.forEach(n => next.delete(n));
+                                                              setSelectedElfSymbols(next);
+                                                          }}
+                                                      />
+                                                  </TableCell>
+                                                  <TableCell sx={{ fontFamily: "monospace", fontWeight: 600 }}>
+                                                      <Box sx={{ display: "flex", alignItems: "center", gap: 0.5 }}>
+                                                          {isCollapsed ? <KeyboardArrowRight sx={{ fontSize: 16, color: "#4ec9b0" }} /> : <KeyboardArrowDown sx={{ fontSize: 16, color: "#4ec9b0" }} />}
+                                                          {row.name}
+                                                          <Chip label={`struct · ${memberCount}`} size="small" sx={{ height: 14, fontSize: 9, ml: 0.5, bgcolor: "rgba(78,201,176,0.15)", color: "#4ec9b0" }} />
+                                                      </Box>
+                                                  </TableCell>
+                                                  <TableCell sx={{ fontFamily: "monospace", color: "#4ec9b0" }}>
+                                                      0x{row.address.toString(16).toUpperCase()}
+                                                      {row.address_warning && <span style={{ color: "#ff9800", marginLeft: 4 }}>⚠</span>}
+                                                  </TableCell>
+                                                  <TableCell sx={{ fontFamily: "monospace", color: "#4ec9b0" }}>0x{row.size.toString(16).toUpperCase()}</TableCell>
+                                                  <TableCell><Chip label={row.type_str} size="small" variant="outlined" sx={{ height: 16, fontSize: 10 }} /></TableCell>
+                                                  <TableCell><Chip label="struct" size="small" variant="outlined" sx={{ height: 16, fontSize: 10, color: "#4ec9b0", borderColor: "#4ec9b0" }} /></TableCell>
+                                                  <TableCell sx={{ fontFamily: "monospace", color: "#4ec9b0", fontSize: 11 }}>{row.dwarf_type || "—"}</TableCell>
+                                                  <TableCell sx={{ color: "#888" }}>{row.section}</TableCell>
+                                              </TableRow>
+                                          );
+                                      }
+                                      // Normal / struct member row
+                                      return (
+                                          <TableRow key={row.name} data-testid={`elf-row-${row.name}`} hover selected={selectedElfSymbols.has(row.name)} onClick={() => {
+                                               const next = new Set(selectedElfSymbols);
+                                               if (next.has(row.name)) next.delete(row.name);
+                                               else next.add(row.name);
+                                               setSelectedElfSymbols(next);
+                                          }} sx={{ cursor: "pointer", bgcolor: row.address_warning ? "rgba(255, 152, 0, 0.08)" : undefined }}>
+                                              <TableCell padding="checkbox">
+                                                  <Checkbox
+                                                      data-testid={`checkbox-elf-${row.name}`}
+                                                      checked={selectedElfSymbols.has(row.name)}
+                                                      size="small"
+                                                  />
+                                              </TableCell>
+                                              <TableCell sx={{ fontFamily: "monospace", pl: row.is_struct_member ? 4 : undefined }}>
+                                                  {row.is_struct_member ? row.name.split('.').pop() : row.name}
+                                                  {row.is_struct_member && (
+                                                      <Typography component="span" sx={{ color: "#666", fontSize: 10, ml: 0.5, fontFamily: "monospace" }}>
+                                                          ({row.name})
+                                                      </Typography>
+                                                  )}
+                                              </TableCell>
+                                              <TableCell sx={{ fontFamily: "monospace", color: "#4ec9b0" }}>
+                                                  0x{row.address.toString(16).toUpperCase()}
+                                                  {row.address_warning && <span style={{ color: "#ff9800", marginLeft: 4 }}>⚠</span>}
+                                              </TableCell>
+                                              <TableCell sx={{ fontFamily: "monospace", color: "#4ec9b0" }}>0x{row.size.toString(16).toUpperCase()}</TableCell>
+                                              <TableCell><Chip label={row.type_str} size="small" variant="outlined" sx={{ height: 16, fontSize: 10 }} /></TableCell>
+                                              <TableCell><Chip label={row.suggested_a2l_type} size="small" color="primary" sx={{ height: 16, fontSize: 10 }} /></TableCell>
+                                              <TableCell sx={{ fontFamily: "monospace", color: row.dwarf_type ? "#ce9178" : "#555", fontSize: 11 }}>
+                                                  {row.dwarf_type || "—"}
+                                              </TableCell>
+                                              <TableCell sx={{ color: "#888" }}>{row.section}</TableCell>
+                                          </TableRow>
+                                      );
+                                  })}
                               </TableBody>
                           </Table>
                       </TableContainer>

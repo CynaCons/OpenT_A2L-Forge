@@ -1008,7 +1008,7 @@ pub fn core_load_elf_symbols_from_buffer(buffer: &[u8]) -> Result<Vec<ElfSymbol>
                         for (member_name, member_offset, member_size, member_type) in &info.members {
                             let full_name = format!("{}.{}", name, member_name);
                             let member_addr = sym.st_value + member_offset;
-                            let (member_a2l_type, member_min, member_max) = infer_a2l_type(&full_name, *member_size);
+                            let (member_a2l_type, member_min, member_max) = infer_a2l_type_from_member(member_type, *member_size);
                             let member_addr_warning = validate_address(member_addr);
 
                             symbols.push(ElfSymbol {
@@ -1609,6 +1609,44 @@ fn infer_a2l_type(symbol_name: &str, symbol_size: u64) -> (String, f64, f64) {
             ("UBYTE".to_string(), 0.0, 255.0)
         }
     }
+}
+
+// Type inference for struct members using DWARF type name + byte size
+fn infer_a2l_type_from_member(dwarf_type: &str, size: u64) -> (String, f64, f64) {
+    let t = dwarf_type.to_lowercase();
+
+    // Float types
+    if t == "float" || t.contains("float32") || (t.contains("float") && size == 4) {
+        return ("FLOAT32_IEEE".to_string(), -3.4e38, 3.4e38);
+    }
+    if t == "double" || t.contains("float64") || (t.contains("double") && size == 8) {
+        return ("FLOAT64_IEEE".to_string(), -1.7e308, 1.7e308);
+    }
+
+    // Signed integer types (no leading 'u' or 'unsigned' prefix)
+    let is_signed = !t.starts_with('u') && !t.contains("unsigned") && !t.contains("uint");
+    if is_signed
+        && (t == "int"
+            || t == "short"
+            || t == "long"
+            || t == "char"
+            || t.starts_with("int")
+            || t.contains("int8")
+            || t.contains("int16")
+            || t.contains("int32")
+            || t.contains("int64"))
+    {
+        return match size {
+            1 => ("SBYTE".to_string(), -128.0, 127.0),
+            2 => ("SWORD".to_string(), -32768.0, 32767.0),
+            4 => ("SLONG".to_string(), -2147483648.0, 2147483647.0),
+            8 => ("A_INT64".to_string(), -9223372036854775808.0, 9223372036854775807.0),
+            _ => infer_a2l_type("", size),
+        };
+    }
+
+    // Fall back to size-based inference (treats as unsigned)
+    infer_a2l_type("", size)
 }
 
 // Validate address range (u64 to u32 conversion)
