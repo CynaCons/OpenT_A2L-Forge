@@ -243,6 +243,15 @@
   - [x] All 22 E2E tests pass (21 clean + 1 flaky with retry)
   - [x] Migrated tests to use data-testid selectors (entity-tree, titlebar-filename, status-message)
   - [x] All 9 Rust integration tests pass
+- [x] R21: Enhanced struct member handling in ELF view
+  - [x] DWARF typedef/const/volatile/restrict chaining for proper struct resolution
+  - [x] `infer_a2l_type_from_member()` — DWARF-aware type inference for struct members
+  - [x] `resolve_struct_through_chain()` / `resolve_size_through_chain()` — follow type indirection
+  - [x] Collapsible struct parent rows with expand/collapse arrows
+  - [x] Struct parent checkbox selects/deselects all members
+  - [x] Member rows indented with short name + full qualified name
+  - [x] ECU addresses displayed as hex (0x format) in tree details
+  - [x] Module selector moved to ELF toolbar header (only shown for multi-module)
 
 ## Iteration 5 — Validation & Integrity (Series E)
 - [ ] E1: Validation engine
