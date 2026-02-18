@@ -92,7 +92,7 @@ export async function openElfFile(page: Page, filePath: string): Promise<void> {
 export async function createNewA2l(page: Page): Promise<void> {
   await page.getByTestId("sidebar-explorer").click();
   await page.getByTestId("btn-new-a2l").click();
-  await page.getByText("new_project").waitFor({ timeout: 10000 });
+  await page.getByTestId("entity-tree").waitFor({ timeout: 10000 });
 }
 
 /** Call a Tauri IPC command directly (low-level, does NOT update React state) */

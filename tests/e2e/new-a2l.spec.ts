@@ -9,8 +9,10 @@ import { test, expect, createNewA2l } from "./fixtures";
 test.describe("New A2L Creation", () => {
   test("create new A2L shows project metadata", async ({ appPage: page }) => {
     await createNewA2l(page);
-    await expect(page.getByText("new_project")).toBeVisible();
-    await expect(page.getByText("new_module")).toBeVisible();
+    // Entity tree should contain the module name
+    await expect(page.getByTestId("entity-tree").getByText("new_module")).toBeVisible();
+    // Titlebar should contain the project file name
+    await expect(page.getByTestId("titlebar-filename")).toBeVisible();
   });
 
   test("new A2L shows entity tree with module", async ({ appPage: page }) => {
@@ -20,9 +22,9 @@ test.describe("New A2L Creation", () => {
     await expect(page.getByTestId("entity-tree")).toBeVisible();
   });
 
-  test("new A2L shows correct file in status bar", async ({ appPage: page }) => {
+  test("new A2L shows filename in titlebar", async ({ appPage: page }) => {
     await createNewA2l(page);
-    // Status bar should show the new project file name
-    await expect(page.getByText("new_project.a2l")).toBeVisible();
+    // Titlebar should show the new project filename
+    await expect(page.getByTestId("titlebar-filename")).toContainText("new_project");
   });
 });

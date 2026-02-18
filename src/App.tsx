@@ -38,6 +38,7 @@ import {
   Alert,
   TextField,
   MenuItem,
+  Menu,
 } from "@mui/material";
 import { SimpleTreeView, TreeItem } from "@mui/x-tree-view";
 import {
@@ -62,6 +63,7 @@ import {
   Terminal,
   FilterNone,
   Save as SaveIcon,
+  NoteAdd as NoteAddIcon,
 } from "@mui/icons-material";
 
 import "./titlebar.css";
@@ -247,7 +249,7 @@ function getKindIcon(kind: string) {
 
 // --- Status Bar Component ---
 
-function StatusBar({ status, fileName, elfName }: { status: StatusState | null, fileName: string, elfName: string }) {
+function StatusBar({ status, fileName, elfName, isDirty, onDismissError }: { status: StatusState | null, fileName: string, elfName: string, isDirty?: boolean, onDismissError?: () => void }) {
   const bg = status?.type === "error" ? "#9a3324" : "#007acc";
   return (
     <Box
@@ -265,15 +267,17 @@ function StatusBar({ status, fileName, elfName }: { status: StatusState | null, 
       }}
     >
       <Stack direction="row" spacing={2} alignItems="center">
-        <Box sx={{ display: "flex", alignItems: "center", gap: 0.5 }}>
+        <Box sx={{ display: "flex", alignItems: "center", gap: 0.5, cursor: status?.type === "error" ? "pointer" : "default" }}
+          onClick={() => { if (status?.type === "error" && onDismissError) onDismissError(); }}>
            {status?.type === "error" ? <CloseIcon sx={{ fontSize: 12 }} /> : <Terminal sx={{ fontSize: 12 }} />}
            <span data-testid="status-message">{status?.message || "Ready"}</span>
+           {status?.type === "error" && <CloseIcon sx={{ fontSize: 10, ml: 0.5, opacity: 0.7 }} />}
         </Box>
       </Stack>
       <Stack direction="row" spacing={3} alignItems="center">
         <Box sx={{ display: "flex", alignItems: "center", gap: 0.5 }}>
            <DescriptionIcon sx={{ fontSize: 12, opacity: 0.7 }} />
-           <span>{fileName || "No A2L"}</span>
+           <span>{isDirty ? "\u2022 " : ""}{fileName || "No A2L"}</span>
         </Box>
         <Box sx={{ display: "flex", alignItems: "center", gap: 0.5 }}>
            <MemoryIcon sx={{ fontSize: 12, opacity: 0.7 }} />
@@ -315,6 +319,11 @@ function App() {
   const [showPreviewDialog, setShowPreviewDialog] = useState(false);
   const [previewMeasurements, setPreviewMeasurements] = useState<SymbolWithMapping[]>([]);
   const [elfChangedBanner, setElfChangedBanner] = useState(false);
+  const [currentElfPath, setCurrentElfPath] = useState<string | null>(null);
+  const [isDirty, setIsDirty] = useState(false);
+  const [showUnsavedDialog, setShowUnsavedDialog] = useState(false);
+  const [pendingAction, setPendingAction] = useState<(() => void) | null>(null);
+  const [fileMenuAnchor, setFileMenuAnchor] = useState<null | HTMLElement>(null);
   const statusTimeoutRef = useRef<number | null>(null);
 
   const refreshTree = async () => {
@@ -530,6 +539,7 @@ function App() {
         { moduleName: selectedModule || metadata.module_names[0] }
       );
       pushStatus("success", `Updated ${result.updated_count} ECU addresses.`);
+      setIsDirty(true);
       await refreshTree();
     } catch (e) {
       pushStatus("error", `Update ECU addresses failed: ${e}`);
@@ -541,8 +551,9 @@ function App() {
 
   async function handleReloadElf() {
     setElfChangedBanner(false);
-    if (elfFileName) {
-      // Re-trigger ELF load from the sidebar's recent entry
+    if (currentElfPath) {
+      await handleLoadElfFromPath(currentElfPath);
+    } else if (elfFileName) {
       const recentElf = recentElfFiles.find(f => f.name === elfFileName);
       if (recentElf?.path) {
         await handleLoadElfFromPath(recentElf.path);
@@ -585,6 +596,7 @@ function App() {
         path: filePath,
         lastOpened: Date.now(),
       });
+      setIsDirty(false);
       pushStatus("success", "Loaded successfully.");
     } catch (e) {
       console.error(e);
@@ -622,6 +634,7 @@ function App() {
         if (currentFilePath) {
              pushStatus("info", "Saving...", false);
              await invoke("save_a2l_to_path", { path: currentFilePath });
+             setIsDirty(false);
              pushStatus("success", "Saved successfully.");
         } else {
              const savePath = await save({
@@ -637,6 +650,7 @@ function App() {
                  await invoke("save_a2l_to_path", { path: savePath });
                  setCurrentFilePath(savePath);
                  setFileName(savePath.split(/[\\/]/).pop() || savePath);
+                 setIsDirty(false);
                  pushStatus("success", "Saved successfully.");
              }
         }
@@ -674,7 +688,14 @@ function App() {
           setIsMaximized(await getCurrentWindow().isMaximized());
       } catch {}
   };
-  const handleClose = () => { try { getCurrentWindow().close().catch(() => {}); } catch {} };
+  const handleClose = () => {
+    if (isDirty) {
+      setPendingAction(() => () => { try { getCurrentWindow().close().catch(() => {}); } catch {} });
+      setShowUnsavedDialog(true);
+      return;
+    }
+    try { getCurrentWindow().close().catch(() => {}); } catch {}
+  };
 
   async function handleOpenElfDialog() {
       const filePath = await open({
@@ -697,6 +718,7 @@ function App() {
 
       const fileName = filePath.split(/[\\/]/).pop() || filePath;
       setElfFileName(fileName);
+      setCurrentElfPath(filePath);
 
       try {
           const symbols = await invoke<ElfSymbol[]>("load_elf_symbols", { path: filePath });
@@ -816,6 +838,7 @@ function App() {
           setA2lTree(tree);
 
           pushStatus("success", `Added ${symbols.length} measurements.`);
+          setIsDirty(true);
           setSelectedElfSymbols(new Set());
       } catch (e) {
           pushStatus("error", `Failed to add symbols: ${e}`);
@@ -825,12 +848,40 @@ function App() {
       }
   }
 
+  async function handleSaveAsA2l() {
+    if (isBusy || !metadata) return;
+    const savePath = await save({
+      title: "Save A2L File As",
+      defaultPath: fileName || "new_project.a2l",
+      filters: [
+        { name: "A2L Files", extensions: ["a2l"] },
+        { name: "All Files", extensions: ["*"] },
+      ],
+    });
+    if (savePath) {
+      setIsBusy(true);
+      pushStatus("info", "Saving...", false);
+      try {
+        await invoke("save_a2l_to_path", { path: savePath });
+        setCurrentFilePath(savePath);
+        setFileName(savePath.split(/[\\/]/).pop() || savePath);
+        setIsDirty(false);
+        pushStatus("success", "Saved successfully.");
+      } catch (e) {
+        pushStatus("error", `Save failed: ${e}`);
+      } finally {
+        setIsBusy(false);
+      }
+    }
+  }
+
   // --- Keyboard Shortcuts ---
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
       if (e.ctrlKey || e.metaKey) {
         if (e.key === "o") { e.preventDefault(); handleOpenA2lDialog(); }
-        if (e.key === "s") { e.preventDefault(); handleSaveA2l(); }
+        if (e.key === "s" && e.shiftKey) { e.preventDefault(); handleSaveAsA2l(); }
+        else if (e.key === "s") { e.preventDefault(); handleSaveA2l(); }
         if (e.key === "n") { e.preventDefault(); handleCreateA2l(); }
       }
       if (e.key === "Escape" && isEditing) { setIsEditing(false); }
@@ -852,7 +903,7 @@ function App() {
   // --- Render Sections ---
 
   const renderActivityBar = () => (
-    <Box sx={{ width: 48, bgcolor: "#333333", display: "flex", flexDirection: "column", alignItems: "center", get py() { return 1.5; } }}>
+    <Box sx={{ width: 48, bgcolor: "#333333", display: "flex", flexDirection: "column", alignItems: "center", py: 1.5 }}>
         <Tooltip title="Explorer" placement="right">
             <IconButton
                 data-testid="sidebar-explorer"
@@ -909,17 +960,17 @@ function App() {
                 <Box sx={{ p: 1, px: 2, display: "flex", alignItems: "center", justifyContent: "space-between" }}>
                     <Typography variant="overline" data-testid="heading-explorer" sx={{ fontWeight: 600, letterSpacing: 1, color: "#bbb" }}>EXPLORER</Typography>
                     <Stack direction="row">
-                        <Tooltip title="New A2L">
-                            <IconButton size="small" data-testid="btn-new-a2l" onClick={handleCreateA2l}><AddIcon fontSize="small" /></IconButton>
+                        <Tooltip title="New A2L (Ctrl+N)">
+                            <IconButton size="small" data-testid="btn-new-a2l" onClick={handleCreateA2l} aria-label="New A2L"><AddIcon fontSize="small" /></IconButton>
                         </Tooltip>
-                         <Tooltip title="Open A2L">
+                         <Tooltip title="Open A2L (Ctrl+O)">
                             <IconButton size="small" data-testid="btn-open-a2l" onClick={handleOpenA2lDialog} aria-label="Open A2L">
                                 <FolderOpenIcon fontSize="small" />
                             </IconButton>
                         </Tooltip>
                         {metadata && (
-                            <Tooltip title="Save A2L">
-                                <IconButton size="small" data-testid="btn-save-a2l" onClick={handleSaveA2l}><SaveIcon fontSize="small" /></IconButton>
+                            <Tooltip title="Save A2L (Ctrl+S)">
+                                <IconButton size="small" data-testid="btn-save-a2l" onClick={handleSaveA2l} aria-label="Save A2L"><SaveIcon fontSize="small" /></IconButton>
                             </Tooltip>
                         )}
                     </Stack>
@@ -1008,10 +1059,12 @@ function App() {
                                             }>
                                                 {visibleItems.map(item => (
                                                     <TreeItem key={item.id} itemId={`item-${item.id}`} label={
-                                                        <Stack direction="row" alignItems="center" spacing={1}>
-                                                            <Box sx={{ display: "flex" }}>{getKindIcon(item.kind)}</Box>
-                                                            <Typography variant="body2" noWrap sx={{ fontFamily: '"JetBrains Mono", monospace', fontSize: 11 }}>{item.name}</Typography>
-                                                        </Stack>
+                                                        <Tooltip title={item.description || ""} placement="right" enterDelay={500}>
+                                                            <Stack direction="row" alignItems="center" spacing={1}>
+                                                                <Box sx={{ display: "flex" }}>{getKindIcon(item.kind)}</Box>
+                                                                <Typography variant="body2" noWrap sx={{ fontFamily: '"JetBrains Mono", monospace', fontSize: 11 }}>{item.name}</Typography>
+                                                            </Stack>
+                                                        </Tooltip>
                                                     } />
                                                 ))}
                                                 {remaining > 0 && (
@@ -1087,7 +1140,27 @@ function App() {
              <Box sx={{ p: 2 }}>
                 <Typography variant="overline" data-testid="heading-settings">SETTINGS</Typography>
                 <Divider sx={{ my: 2 }} />
-                <Typography variant="body2" color="text.secondary">No settings available.</Typography>
+                <Typography variant="subtitle2" sx={{ mb: 1 }}>Recent Files</Typography>
+                <Button size="small" variant="outlined" onClick={() => {
+                    setRecentA2lFiles([]);
+                    setRecentElfFiles([]);
+                    localStorage.removeItem(RECENT_A2L_KEY);
+                    localStorage.removeItem(RECENT_ELF_KEY);
+                    pushStatus("info", "Recent files cleared.");
+                }}>Clear Recent Files</Button>
+                <Divider sx={{ my: 2 }} />
+                <Typography variant="subtitle2" sx={{ mb: 1 }}>Keyboard Shortcuts</Typography>
+                <Box sx={{ fontSize: 12, fontFamily: "monospace", color: "#aaa" }}>
+                    <Typography variant="caption" display="block">Ctrl+N &emsp; New A2L</Typography>
+                    <Typography variant="caption" display="block">Ctrl+O &emsp; Open A2L</Typography>
+                    <Typography variant="caption" display="block">Ctrl+S &emsp; Save</Typography>
+                    <Typography variant="caption" display="block">Ctrl+Shift+S &emsp; Save As</Typography>
+                    <Typography variant="caption" display="block">Escape &emsp; Cancel Edit</Typography>
+                </Box>
+                <Divider sx={{ my: 2 }} />
+                <Typography variant="subtitle2" sx={{ mb: 1 }}>About</Typography>
+                <Typography variant="body2" color="text.secondary">OpenT A2L Forge v0.1.0</Typography>
+                <Typography variant="caption" color="text.secondary" display="block">Tauri + React + Rust</Typography>
             </Box>
         )}
     </Box>
@@ -1116,16 +1189,20 @@ function App() {
                                   Update ECU Addresses
                               </Button>
                           )}
-                          <Button
-                              data-testid="btn-add-to-a2l"
-                              variant="contained"
-                              disabled={selectedElfSymbols.size === 0 || !metadata}
-                              startIcon={<AddIcon />}
-                              size="small"
-                              onClick={handleAddSymbols}
-                          >
-                              Add to Project
-                          </Button>
+                          <Tooltip title={!metadata ? "Load an A2L project first" : selectedElfSymbols.size === 0 ? "Select symbols from the table below" : ""}>
+                              <span>
+                                  <Button
+                                      data-testid="btn-add-to-a2l"
+                                      variant="contained"
+                                      disabled={selectedElfSymbols.size === 0 || !metadata}
+                                      startIcon={<AddIcon />}
+                                      size="small"
+                                      onClick={handleAddSymbols}
+                                  >
+                                      Add to Project
+                                  </Button>
+                              </span>
+                          </Tooltip>
                       </Stack>
                   </Box>
 
@@ -1303,10 +1380,23 @@ function App() {
 
     if (!selectedItem) {
         return (
-            <Box sx={{ display: "flex", flex: 1, alignItems: "center", justifyContent: "center", flexDirection: "column", opacity: 0.2 }}>
-                <DescriptionIcon sx={{ fontSize: 80, mb: 2 }} />
-                <Typography variant="h5">OpenT A2L Forge</Typography>
-                <Typography>Select a file to begin</Typography>
+            <Box sx={{ display: "flex", flex: 1, alignItems: "center", justifyContent: "center", flexDirection: "column" }}>
+                <DataObject sx={{ fontSize: 64, mb: 2, color: "#333" }} />
+                <Typography variant="h5" sx={{ color: "#555", mb: 1 }}>OpenT A2L Forge</Typography>
+                <Typography variant="body2" sx={{ color: "#666", mb: 3 }}>
+                    {metadata ? "Select an entity from the Explorer to view details" : "Open or create an A2L file to get started"}
+                </Typography>
+                {!metadata && (
+                    <Stack direction="row" spacing={2} sx={{ mb: 3 }}>
+                        <Button variant="outlined" size="small" startIcon={<FolderOpenIcon />} onClick={handleOpenA2lDialog}>Open A2L</Button>
+                        <Button variant="outlined" size="small" startIcon={<NoteAddIcon />} onClick={handleCreateA2l}>New A2L</Button>
+                    </Stack>
+                )}
+                <Box sx={{ color: "#555", fontSize: 11, textAlign: "left" }}>
+                    <Typography variant="caption" display="block" sx={{ fontFamily: "monospace" }}>Ctrl+O &nbsp; Open File</Typography>
+                    <Typography variant="caption" display="block" sx={{ fontFamily: "monospace" }}>Ctrl+N &nbsp; New File</Typography>
+                    <Typography variant="caption" display="block" sx={{ fontFamily: "monospace" }}>Ctrl+S &nbsp; Save</Typography>
+                </Box>
             </Box>
         );
     }
@@ -1442,7 +1532,7 @@ function App() {
                 onDoubleClick={handleToggleMaximize}
              >
                 <DataObject sx={{ fontSize: 16, color: "#007acc" }} />
-                <Typography variant="caption" sx={{ fontWeight: 600 }}>OpenT A2L Forge</Typography>
+                <Typography variant="caption" sx={{ fontWeight: 600 }} data-testid="titlebar-filename">{isDirty ? "\u2022 " : ""}OpenT A2L Forge{fileName ? ` — ${fileName}` : ""}</Typography>
              </Box>
 
              {/* Window Controls - Non-draggable */}
@@ -1458,6 +1548,37 @@ function App() {
              </Box>
         </Box>
 
+        {/* Menu Bar */}
+        <Box sx={{ height: 28, bgcolor: "#333", display: "flex", alignItems: "center", px: 1, borderBottom: "1px solid #444" }}>
+            <Button size="small" sx={{ fontSize: 11, color: "#ccc", minWidth: "auto", px: 1, textTransform: "none" }}
+                onClick={(e) => setFileMenuAnchor(e.currentTarget)}>File</Button>
+            <Menu anchorEl={fileMenuAnchor} open={Boolean(fileMenuAnchor)} onClose={() => setFileMenuAnchor(null)}
+                slotProps={{ paper: { sx: { bgcolor: "#252526", color: "#ccc", minWidth: 200 } } }}>
+                <MenuItem onClick={() => { handleCreateA2l(); setFileMenuAnchor(null); }} sx={{ fontSize: 13 }}>
+                    <ListItemText>New A2L</ListItemText>
+                    <Typography variant="body2" color="text.secondary" sx={{ ml: 3, fontSize: 11 }}>Ctrl+N</Typography>
+                </MenuItem>
+                <MenuItem onClick={() => { handleOpenA2lDialog(); setFileMenuAnchor(null); }} sx={{ fontSize: 13 }}>
+                    <ListItemText>Open A2L...</ListItemText>
+                    <Typography variant="body2" color="text.secondary" sx={{ ml: 3, fontSize: 11 }}>Ctrl+O</Typography>
+                </MenuItem>
+                <MenuItem onClick={() => { handleSaveA2l(); setFileMenuAnchor(null); }} disabled={!metadata} sx={{ fontSize: 13 }}>
+                    <ListItemText>Save</ListItemText>
+                    <Typography variant="body2" color="text.secondary" sx={{ ml: 3, fontSize: 11 }}>Ctrl+S</Typography>
+                </MenuItem>
+                <MenuItem onClick={() => { handleSaveAsA2l(); setFileMenuAnchor(null); }} disabled={!metadata} sx={{ fontSize: 13 }}>
+                    <ListItemText>Save As...</ListItemText>
+                    <Typography variant="body2" color="text.secondary" sx={{ ml: 3, fontSize: 11 }}>Ctrl+Shift+S</Typography>
+                </MenuItem>
+                {recentA2lFiles.length > 0 && <Divider sx={{ borderColor: "#444" }} />}
+                {recentA2lFiles.filter(f => f.path).slice(0, 5).map(f => (
+                    <MenuItem key={f.path} onClick={() => { if (f.path) handleLoadA2lFromPath(f.path); setFileMenuAnchor(null); }} sx={{ fontSize: 12 }}>
+                        {f.name}
+                    </MenuItem>
+                ))}
+            </Menu>
+        </Box>
+
         {/* Content */}
         <Box sx={{ flex: 1, display: "flex", overflow: "hidden" }}>
             {renderActivityBar()}
@@ -1466,7 +1587,7 @@ function App() {
         </Box>
 
         {isBusy && <LinearProgress sx={{ height: 2 }} />}
-        <StatusBar status={status} fileName={fileName} elfName={elfFileName} />
+        <StatusBar status={status} fileName={fileName} elfName={elfFileName} isDirty={isDirty} onDismissError={() => setStatus(null)} />
 
         {/* Conflict Resolution Dialog */}
         <Dialog data-testid="dialog-conflict" open={showConflictDialog} onClose={() => setShowConflictDialog(false)} maxWidth="md" fullWidth>
@@ -1594,6 +1715,27 @@ function App() {
                 <Button onClick={handleConfirmPreview} variant="contained">
                     Continue to Import
                 </Button>
+            </DialogActions>
+        </Dialog>
+
+        {/* Unsaved Changes Dialog */}
+        <Dialog open={showUnsavedDialog} onClose={() => setShowUnsavedDialog(false)}>
+            <DialogTitle>Unsaved Changes</DialogTitle>
+            <DialogContent>
+                <Typography>You have unsaved changes. Do you want to save before continuing?</Typography>
+            </DialogContent>
+            <DialogActions>
+                <Button onClick={() => { setShowUnsavedDialog(false); setPendingAction(null); }}>Cancel</Button>
+                <Button onClick={() => {
+                    setShowUnsavedDialog(false);
+                    setIsDirty(false);
+                    if (pendingAction) { pendingAction(); setPendingAction(null); }
+                }} color="warning">Don't Save</Button>
+                <Button onClick={async () => {
+                    setShowUnsavedDialog(false);
+                    await handleSaveA2l();
+                    if (pendingAction) { pendingAction(); setPendingAction(null); }
+                }} variant="contained">Save</Button>
             </DialogActions>
         </Dialog>
       </Box>

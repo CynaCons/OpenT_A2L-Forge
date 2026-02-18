@@ -1,6 +1,6 @@
 # PLAN — OpenT_A2L-Forge
 
-**Last updated:** 2026-02-17
+**Last updated:** 2026-02-18
 
 ## Iteration 0 — Foundations
 - [x] Repo scaffolding, build, and CI basics
@@ -227,6 +227,22 @@
   - [x] elf-to-a2l.spec.ts (2 tests) — full import workflow, view switching
   - [x] elf-update-ecu.spec.ts (1 test) — ECU address update after import
 - [x] CLAUDE.md updated: NO MOCKS rule, TaskList required, SRS refs, PLAN.md format
+- [x] R19: UX Polish (expert review)
+  - [x] Unsaved changes guard — confirmation dialog before close/open when dirty
+  - [x] File menu bar (New, Open, Save, Save As, Recent Files submenu)
+  - [x] Save As (Ctrl+Shift+S) with native dialog
+  - [x] Titlebar shows filename and dirty indicator
+  - [x] Improved empty state with actionable buttons and shortcut hints
+  - [x] Tooltip for disabled "Add to Project" button
+  - [x] Settings panel: Clear Recent Files, Keyboard Shortcuts reference, About
+  - [x] ARIA labels and shortcut hints on toolbar buttons
+  - [x] Tree item description tooltips
+  - [x] Status bar click-to-dismiss for errors, dirty indicator dot
+  - [x] ELF watcher uses stored `currentElfPath` for reliable reload
+- [x] R20: Test stabilization
+  - [x] All 22 E2E tests pass (21 clean + 1 flaky with retry)
+  - [x] Migrated tests to use data-testid selectors (entity-tree, titlebar-filename, status-message)
+  - [x] All 9 Rust integration tests pass
 
 ## Iteration 5 — Validation & Integrity (Series E)
 - [ ] E1: Validation engine
