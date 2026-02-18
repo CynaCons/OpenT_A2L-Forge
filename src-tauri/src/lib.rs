@@ -1629,7 +1629,7 @@ fn infer_a2l_type_from_member(dwarf_type: &str, size: u64) -> (String, f64, f64)
         && (t == "int"
             || t == "short"
             || t == "long"
-            || t == "char"
+            || t.contains("char")
             || t.starts_with("int")
             || t.contains("int8")
             || t.contains("int16")
