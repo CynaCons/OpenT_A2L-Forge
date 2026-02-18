@@ -252,6 +252,15 @@
   - [x] Member rows indented with short name + full qualified name
   - [x] ECU addresses displayed as hex (0x format) in tree details
   - [x] Module selector moved to ELF toolbar header (only shown for multi-module)
+- [x] R22: DWARF5 support and comprehensive struct member parsing
+  - [x] Replaced manual DWARF section loading with `gimli::DwarfSections::load()`
+  - [x] Supports DWARF5 `DW_FORM_strx` string resolution via `.debug_str_offsets`
+  - [x] Runtime endianness detection from ELF header (LE/BE)
+  - [x] Added `DW_TAG_enumeration_type` for proper enum byte size resolution
+  - [x] Added `DW_TAG_union_type` support
+  - [x] Added byte size tracking for `DW_TAG_array_type`
+  - [x] 3 Voyant ELF integration tests: struct member expansion, data type verification, A2L measurement creation
+  - [x] All 12 Rust tests pass, all 22 E2E tests pass
 
 ## Iteration 5 — Validation & Integrity (Series E)
 - [ ] E1: Validation engine

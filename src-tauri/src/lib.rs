@@ -1672,15 +1672,15 @@ fn validate_address(address: u64) -> Option<String> {
 
 /// Information extracted from DWARF debug info for a symbol
 #[derive(Clone, Debug)]
-struct DwarfSymbolInfo {
-    type_name: String,
+pub struct DwarfSymbolInfo {
+    pub type_name: String,
     /// For struct members: (member_name, offset, size, type_name)
-    members: Vec<(String, u64, u64, String)>,
+    pub members: Vec<(String, u64, u64, String)>,
 }
 
 /// Parse DWARF debug info from an ELF buffer to extract type information.
 /// Returns a map of symbol name -> DwarfSymbolInfo.
-fn parse_dwarf_symbols(buffer: &[u8]) -> HashMap<String, DwarfSymbolInfo> {
+pub fn parse_dwarf_symbols(buffer: &[u8]) -> HashMap<String, DwarfSymbolInfo> {
     let mut result = HashMap::new();
 
     // Try to load DWARF sections from the ELF
@@ -1689,38 +1689,38 @@ fn parse_dwarf_symbols(buffer: &[u8]) -> HashMap<String, DwarfSymbolInfo> {
         Err(_) => return result,
     };
 
-    // Build a section-name-to-data map
-    let section_data = |name: &str| -> Option<&[u8]> {
+    // Build a section-name-to-data lookup for all DWARF sections.
+    // Using DwarfSections::load ensures DWARF5 sections (debug_str_offsets,
+    // debug_addr, debug_line_str, etc.) are loaded correctly.
+    let section_data = |name: &str| -> &[u8] {
         for sh in &elf.section_headers {
             if let Some(section_name) = elf.shdr_strtab.get_at(sh.sh_name) {
                 if section_name == name {
                     let start = sh.sh_offset as usize;
                     let end = start + sh.sh_size as usize;
                     if end <= buffer.len() {
-                        return Some(&buffer[start..end]);
+                        return &buffer[start..end];
                     }
                 }
             }
         }
-        None
+        &[]
     };
 
-    let debug_info = match section_data(".debug_info") {
-        Some(d) => d,
-        None => return result,
-    };
-    let debug_abbrev = match section_data(".debug_abbrev") {
-        Some(d) => d,
-        None => return result,
-    };
-    let debug_str = section_data(".debug_str").unwrap_or(&[]);
+    // Detect endianness from ELF header
+    let is_big_endian = buffer.get(5) == Some(&2);
 
-    let dwarf = gimli::Dwarf {
-        debug_info: gimli::DebugInfo::new(debug_info, gimli::LittleEndian),
-        debug_abbrev: gimli::DebugAbbrev::new(debug_abbrev, gimli::LittleEndian),
-        debug_str: gimli::DebugStr::new(debug_str, gimli::LittleEndian),
-        ..Default::default()
+    let load_section = |id: gimli::SectionId| -> Result<gimli::EndianSlice<'_, gimli::RunTimeEndian>, gimli::Error> {
+        let data = section_data(id.name());
+        let endian = if is_big_endian { gimli::RunTimeEndian::Big } else { gimli::RunTimeEndian::Little };
+        Ok(gimli::EndianSlice::new(data, endian))
     };
+
+    let dwarf_sections = match gimli::DwarfSections::load(load_section) {
+        Ok(sections) => sections,
+        Err(_) => return result,
+    };
+    let dwarf = dwarf_sections.borrow(|section| section.clone());
 
     // Build a type offset -> type name map
     let mut type_map: HashMap<gimli::DebugInfoOffset, String> = HashMap::new();
@@ -1769,6 +1769,22 @@ fn parse_dwarf_symbols(buffer: &[u8]) -> HashMap<String, DwarfSymbolInfo> {
                         type_size_map.insert(offset, size);
                     }
                 }
+                gimli::DW_TAG_enumeration_type => {
+                    if let Some(name) = get_die_name(&dwarf, &unit, entry) {
+                        type_map.insert(offset, name);
+                    }
+                    if let Some(size) = get_byte_size(entry) {
+                        type_size_map.insert(offset, size);
+                    }
+                }
+                gimli::DW_TAG_union_type => {
+                    if let Some(name) = get_die_name(&dwarf, &unit, entry) {
+                        type_map.insert(offset, format!("union {}", name));
+                    }
+                    if let Some(size) = get_byte_size(entry) {
+                        type_size_map.insert(offset, size);
+                    }
+                }
                 gimli::DW_TAG_pointer_type => {
                     type_map.insert(offset, "pointer".to_string());
                     // pointer size from unit address size
@@ -1776,6 +1792,9 @@ fn parse_dwarf_symbols(buffer: &[u8]) -> HashMap<String, DwarfSymbolInfo> {
                 }
                 gimli::DW_TAG_array_type => {
                     type_map.insert(offset, "array".to_string());
+                    if let Some(size) = get_byte_size(entry) {
+                        type_size_map.insert(offset, size);
+                    }
                 }
                 // Qualifiers: const, volatile, restrict — track for typedef chaining
                 gimli::DW_TAG_const_type
@@ -1921,9 +1940,9 @@ fn resolve_size_through_chain(
 }
 
 fn get_die_name(
-    dwarf: &gimli::Dwarf<gimli::EndianSlice<gimli::LittleEndian>>,
-    unit: &gimli::Unit<gimli::EndianSlice<gimli::LittleEndian>>,
-    entry: &gimli::DebuggingInformationEntry<gimli::EndianSlice<gimli::LittleEndian>>,
+    dwarf: &gimli::Dwarf<gimli::EndianSlice<'_, gimli::RunTimeEndian>>,
+    unit: &gimli::Unit<gimli::EndianSlice<'_, gimli::RunTimeEndian>>,
+    entry: &gimli::DebuggingInformationEntry<gimli::EndianSlice<'_, gimli::RunTimeEndian>>,
 ) -> Option<String> {
     entry.attr_value(gimli::DW_AT_name).ok().flatten().and_then(|val| {
         dwarf.attr_string(unit, val).ok().map(|s| {
@@ -1933,8 +1952,8 @@ fn get_die_name(
 }
 
 fn resolve_type_to_offset(
-    unit: &gimli::Unit<gimli::EndianSlice<gimli::LittleEndian>>,
-    entry: &gimli::DebuggingInformationEntry<gimli::EndianSlice<gimli::LittleEndian>>,
+    unit: &gimli::Unit<gimli::EndianSlice<'_, gimli::RunTimeEndian>>,
+    entry: &gimli::DebuggingInformationEntry<gimli::EndianSlice<'_, gimli::RunTimeEndian>>,
 ) -> Option<gimli::DebugInfoOffset> {
     let val = entry.attr_value(gimli::DW_AT_type).ok().flatten()?;
     match val {
@@ -1947,7 +1966,7 @@ fn resolve_type_to_offset(
 }
 
 fn get_member_location(
-    entry: &gimli::DebuggingInformationEntry<gimli::EndianSlice<gimli::LittleEndian>>,
+    entry: &gimli::DebuggingInformationEntry<gimli::EndianSlice<'_, gimli::RunTimeEndian>>,
 ) -> u64 {
     entry.attr_value(gimli::DW_AT_data_member_location).ok().flatten()
         .and_then(|val| match val {
@@ -1959,7 +1978,7 @@ fn get_member_location(
 }
 
 fn get_byte_size(
-    entry: &gimli::DebuggingInformationEntry<gimli::EndianSlice<gimli::LittleEndian>>,
+    entry: &gimli::DebuggingInformationEntry<gimli::EndianSlice<'_, gimli::RunTimeEndian>>,
 ) -> Option<u64> {
     entry.attr_value(gimli::DW_AT_byte_size).ok().flatten()
         .and_then(|val| match val {

@@ -1,7 +1,8 @@
 use a2lfile::A2lObjectName;
 use opent_a2l_forge_lib::{
     core_check_conflicts, core_create_measurements, core_export_a2l, core_load_a2l_from_path,
-    core_load_a2l_from_string, core_load_elf_symbols, core_update_ecu_addresses, SymbolWithMapping,
+    core_load_a2l_from_string, core_load_elf_symbols, core_update_ecu_addresses,
+    parse_dwarf_symbols, SymbolWithMapping,
 };
 
 fn fixtures_dir() -> String {
@@ -298,6 +299,282 @@ fn test_export_contains_imported_measurements() {
         exported.contains("/begin MEASUREMENT beta_actuator"),
         "Export should contain beta_actuator measurement"
     );
+}
+
+// ─── Voyant ELF struct member tests ────────────────────────────────────────
+
+#[test]
+fn test_voyant_elf_struct_members() {
+    let voyant_elf =
+        r"C:\dev\interview\voyant-photonics\VoyantTakeHomeAssignment\build\Debug\VoyantTakeHomeAssignment.elf";
+    if !std::path::Path::new(voyant_elf).exists() {
+        println!("Skipping: Voyant ELF not found at {voyant_elf}");
+        return;
+    }
+
+    let symbols = core_load_elf_symbols(voyant_elf).unwrap();
+    println!("Voyant ELF: {} total symbols", symbols.len());
+
+    // Known struct variable names from the source code
+    let expected_structs = ["g_sc", "g_vd", "g_cs", "g_oc", "g_sched", "g_cd"];
+
+    for name in &expected_structs {
+        let parent = symbols.iter().find(|s| s.name == *name);
+        let members: Vec<_> = symbols
+            .iter()
+            .filter(|s| s.parent_struct.as_deref() == Some(*name))
+            .collect();
+
+        if let Some(p) = parent {
+            println!(
+                "  {} — addr=0x{:X} size={} dwarf={:?} members={}",
+                name,
+                p.address,
+                p.size,
+                p.dwarf_type,
+                members.len()
+            );
+            for m in &members {
+                println!(
+                    "    .{} — addr=0x{:X} size={} type={} dwarf={:?}",
+                    m.name, m.address, m.size, m.suggested_a2l_type, m.dwarf_type
+                );
+            }
+        } else {
+            println!("  {} — NOT FOUND in symbol table", name);
+        }
+
+        // ASSERT: each known struct should have members
+        if parent.is_some() {
+            assert!(
+                !members.is_empty(),
+                "Struct '{}' found in symbol table but has no struct members expanded",
+                name
+            );
+        }
+    }
+
+    // Summary
+    let total_struct_members = symbols.iter().filter(|s| s.is_struct_member).count();
+    let total_with_dwarf = symbols.iter().filter(|s| s.dwarf_type.is_some()).count();
+    println!(
+        "\nSummary: {} struct members, {} with dwarf_type out of {} total",
+        total_struct_members, total_with_dwarf, symbols.len()
+    );
+
+    assert!(
+        total_struct_members > 0,
+        "Expected at least some struct members, got 0"
+    );
+
+    // Verify specific data type inferences for known members
+    let check_member = |parent: &str, member: &str, expected_type: &str, expected_size: u64| {
+        let full_name = format!("{}.{}", parent, member);
+        let sym = symbols.iter().find(|s| s.name == full_name);
+        assert!(sym.is_some(), "Member '{}' not found", full_name);
+        let sym = sym.unwrap();
+        assert_eq!(
+            sym.suggested_a2l_type, expected_type,
+            "Type mismatch for '{}': got '{}', expected '{}'",
+            full_name, sym.suggested_a2l_type, expected_type
+        );
+        if expected_size > 0 {
+            assert_eq!(
+                sym.size, expected_size,
+                "Size mismatch for '{}': got {}, expected {}",
+                full_name, sym.size, expected_size
+            );
+        }
+    };
+
+    // g_vd: BSW_02_VoltageDriver_t
+    check_member("g_vd", "last_dac_value", "UWORD", 2);    // uint16_t -> UWORD
+    check_member("g_vd", "write_cnt", "ULONG", 4);          // uint32_t -> ULONG
+    check_member("g_vd", "state", "UBYTE", 1);              // enum (1 byte) -> UBYTE
+
+    // g_oc: APP_01_Control_t
+    check_member("g_oc", "in_current_value_mA", "FLOAT32_IEEE", 4);  // float32_t -> FLOAT32_IEEE
+    check_member("g_oc", "in_number_of_samples", "ULONG", 4);        // uint32_t -> ULONG
+    check_member("g_oc", "flag_safety_shutdown", "UBYTE", 1);         // _Bool -> UBYTE
+    check_member("g_oc", "cnt_1ms", "ULONG", 4);                     // uint32_t -> ULONG
+
+    // g_sched: SCHED_t
+    check_member("g_sched", "flag_1ms", "UBYTE", 1);                 // uint8_t -> UBYTE
+    check_member("g_sched", "cnt_isr_1ms", "ULONG", 4);              // uint32_t -> ULONG
+    check_member("g_sched", "diag_1ms_overrun_cnt", "UWORD", 2);     // uint16_t -> UWORD
+
+    // g_cs: BSW_01_CurrentSampling_t
+    check_member("g_cs", "out_current_value_mA", "FLOAT32_IEEE", 4); // float32_t -> FLOAT32_IEEE
+    check_member("g_cs", "current_value_raw", "UWORD", 2);           // uint16_t -> UWORD
+}
+
+#[test]
+fn test_voyant_struct_members_as_a2l_measurements() {
+    let voyant_elf =
+        r"C:\dev\interview\voyant-photonics\VoyantTakeHomeAssignment\build\Debug\VoyantTakeHomeAssignment.elf";
+    if !std::path::Path::new(voyant_elf).exists() {
+        println!("Skipping: Voyant ELF not found");
+        return;
+    }
+
+    // Create empty A2L
+    let a2l_text = r#"ASAP2_VERSION 1 71
+/begin PROJECT voyant_test ""
+  /begin MODULE test_mod ""
+  /end MODULE
+/end PROJECT"#;
+    let (mut a2l, _) = core_load_a2l_from_string(a2l_text).unwrap();
+
+    // Load ELF symbols
+    let symbols = core_load_elf_symbols(voyant_elf).unwrap();
+
+    // Pick struct members from g_vd and g_oc to import
+    let members_to_import: Vec<_> = symbols
+        .iter()
+        .filter(|s| {
+            s.is_struct_member
+                && (s.parent_struct.as_deref() == Some("g_vd")
+                    || s.parent_struct.as_deref() == Some("g_oc"))
+        })
+        .collect();
+
+    assert!(
+        members_to_import.len() >= 5,
+        "Expected at least 5 struct members from g_vd + g_oc, got {}",
+        members_to_import.len()
+    );
+
+    let mappings: Vec<SymbolWithMapping> = members_to_import
+        .iter()
+        .map(|s| SymbolWithMapping {
+            name: s.name.clone(),
+            address: s.address,
+            a2l_type: s.suggested_a2l_type.clone(),
+            lower_limit: s.suggested_limits.0,
+            upper_limit: s.suggested_limits.1,
+            conversion: None,
+            resolution: None,
+            accuracy: None,
+        })
+        .collect();
+
+    let count = mappings.len();
+    core_create_measurements(&mut a2l, None, &mappings).unwrap();
+
+    let module = &a2l.project.module[0];
+    assert_eq!(
+        module.measurement.len(),
+        count,
+        "Should have created {} measurements from struct members",
+        count
+    );
+
+    // Verify specific measurements exist with correct types
+    let check_a2l = |name: &str, expected_type: &str, expected_addr: u64| {
+        let meas = module
+            .measurement
+            .iter()
+            .find(|m| m.get_name() == name);
+        assert!(meas.is_some(), "A2L measurement '{}' not found", name);
+        let meas = meas.unwrap();
+        assert_eq!(
+            meas.datatype.to_string().to_uppercase(),
+            expected_type,
+            "A2L type mismatch for '{}': got '{}', expected '{}'",
+            name,
+            meas.datatype.to_string().to_uppercase(),
+            expected_type
+        );
+        let addr = meas.ecu_address.as_ref().map(|a| a.address as u64).unwrap_or(0);
+        assert_eq!(addr, expected_addr, "Address mismatch for '{}'", name);
+    };
+
+    // g_vd members
+    let vd_write_cnt = symbols.iter().find(|s| s.name == "g_vd.write_cnt").unwrap();
+    check_a2l("g_vd.write_cnt", "ULONG", vd_write_cnt.address);
+
+    let vd_last_dac = symbols.iter().find(|s| s.name == "g_vd.last_dac_value").unwrap();
+    check_a2l("g_vd.last_dac_value", "UWORD", vd_last_dac.address);
+
+    // g_oc members
+    let oc_current = symbols.iter().find(|s| s.name == "g_oc.in_current_value_mA").unwrap();
+    check_a2l("g_oc.in_current_value_mA", "FLOAT32_IEEE", oc_current.address);
+
+    // Export and verify A2L output contains the measurements
+    let exported = core_export_a2l(&a2l);
+    assert!(
+        exported.contains("/begin MEASUREMENT g_vd.write_cnt"),
+        "Export should contain g_vd.write_cnt"
+    );
+    assert!(
+        exported.contains("/begin MEASUREMENT g_oc.in_current_value_mA"),
+        "Export should contain g_oc.in_current_value_mA"
+    );
+
+    println!(
+        "Successfully imported {} struct members as A2L measurements",
+        count
+    );
+}
+
+#[test]
+fn test_voyant_dwarf_parsing_directly() {
+    let voyant_elf =
+        r"C:\dev\interview\voyant-photonics\VoyantTakeHomeAssignment\build\Debug\VoyantTakeHomeAssignment.elf";
+    if !std::path::Path::new(voyant_elf).exists() {
+        println!("Skipping: Voyant ELF not found");
+        return;
+    }
+
+    let buffer = std::fs::read(voyant_elf).unwrap();
+    let dwarf_info = parse_dwarf_symbols(&buffer);
+
+    println!("DWARF parse result: {} variables found", dwarf_info.len());
+
+    // Print all DWARF variables that have struct members
+    let with_members: Vec<_> = dwarf_info
+        .iter()
+        .filter(|(_, info)| !info.members.is_empty())
+        .collect();
+    println!("Variables with struct members: {}", with_members.len());
+    for (name, info) in &with_members {
+        println!(
+            "  {} (type={}) — {} members",
+            name,
+            info.type_name,
+            info.members.len()
+        );
+        for (mname, offset, size, mtype) in &info.members {
+            println!("    .{} offset={} size={} type={}", mname, offset, size, mtype);
+        }
+    }
+
+    // Print all DWARF variables (even those without members)
+    let expected = ["g_sc", "g_vd", "g_cs", "g_oc", "g_sched", "g_cd"];
+    println!("\nLooking for expected struct variables:");
+    for name in &expected {
+        match dwarf_info.get(*name) {
+            Some(info) => println!(
+                "  {} — FOUND type={} members={}",
+                name,
+                info.type_name,
+                info.members.len()
+            ),
+            None => println!("  {} — NOT FOUND in DWARF info", name),
+        }
+    }
+
+    // Print first 30 DWARF entries to see what variable names look like
+    println!("\nFirst 30 DWARF variables:");
+    for (i, (name, info)) in dwarf_info.iter().take(30).enumerate() {
+        println!(
+            "  [{}] {} — type={} members={}",
+            i,
+            name,
+            info.type_name,
+            info.members.len()
+        );
+    }
 }
 
 // ─── Update ECU addresses test ──────────────────────────────────────────────
