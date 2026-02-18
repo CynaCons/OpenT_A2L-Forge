@@ -1145,28 +1145,6 @@ function App() {
                     Load ELF Binary
                 </Button>
 
-                {metadata && metadata.module_names.length > 0 && (
-                    <Box sx={{ mt: 3 }}>
-                        <Typography variant="caption" color="text.secondary">TARGET MODULE</Typography>
-                        <TextField
-                            data-testid="select-module"
-                            select
-                            fullWidth
-                            size="small"
-                            value={selectedModule || metadata.module_names[0]}
-                            onChange={(e) => {
-                                setSelectedModule(e.target.value);
-                                localStorage.setItem('elf_target_module', e.target.value);
-                            }}
-                            sx={{ mt: 1 }}
-                        >
-                            {metadata.module_names.map(name => (
-                                <MenuItem key={name} value={name}>{name}</MenuItem>
-                            ))}
-                        </TextField>
-                    </Box>
-                )}
-
                 {recentElfFiles.length > 0 && (
                     <Box sx={{ mt: 3 }} data-testid="recent-elf-list">
                          <Typography variant="caption" color="text.secondary">RECENT</Typography>
@@ -1235,6 +1213,24 @@ function App() {
                               >
                                   Update ECU Addresses
                               </Button>
+                          )}
+                          {metadata && metadata.module_names.length > 1 && (
+                              <TextField
+                                  data-testid="select-module"
+                                  select
+                                  size="small"
+                                  label="Module"
+                                  value={selectedModule || metadata.module_names[0]}
+                                  onChange={(e) => {
+                                      setSelectedModule(e.target.value);
+                                      localStorage.setItem('elf_target_module', e.target.value);
+                                  }}
+                                  sx={{ minWidth: 140 }}
+                              >
+                                  {metadata.module_names.map(name => (
+                                      <MenuItem key={name} value={name}>{name}</MenuItem>
+                                  ))}
+                              </TextField>
                           )}
                           <Tooltip title={!metadata ? "Load an A2L project first" : selectedElfSymbols.size === 0 ? "Select symbols from the table below" : ""}>
                               <span>

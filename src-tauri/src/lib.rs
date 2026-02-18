@@ -115,6 +115,14 @@ fn limits_detail(lower: f64, upper: f64) -> A2lTreeDetail {
     detail("Limits", format!("{lower} .. {upper}"))
 }
 
+fn ecu_addr_detail(label: &str, addr: &Option<a2lfile::EcuAddress>) -> A2lTreeDetail {
+    let rendered = addr
+        .as_ref()
+        .map(|a| format!("0x{:08X}", a.address))
+        .unwrap_or_else(|| "—".to_string());
+    detail(label, rendered)
+}
+
 impl A2lDetailProvider for a2lfile::Measurement {
     fn description(&self) -> Option<String> {
         (!self.long_identifier.is_empty()).then(|| self.long_identifier.clone())
@@ -129,7 +137,7 @@ impl A2lDetailProvider for a2lfile::Measurement {
             detail("Accuracy", self.accuracy),
             limits_detail(self.lower_limit, self.upper_limit),
             opt_detail("Address type", &self.address_type),
-            opt_detail("ECU address", &self.ecu_address),
+            ecu_addr_detail("ECU address", &self.ecu_address),
             opt_detail("ECU address ext", &self.ecu_address_extension),
             opt_detail("Byte order", &self.byte_order),
             opt_detail("Array size", &self.array_size),
@@ -1716,10 +1724,14 @@ fn parse_dwarf_symbols(buffer: &[u8]) -> HashMap<String, DwarfSymbolInfo> {
 
     // Build a type offset -> type name map
     let mut type_map: HashMap<gimli::DebugInfoOffset, String> = HashMap::new();
+    // Build a type offset -> byte size map (for resolving member sizes)
+    let mut type_size_map: HashMap<gimli::DebugInfoOffset, u64> = HashMap::new();
+    // Build a typedef/qualifier offset -> underlying type offset map
+    let mut type_indirection: HashMap<gimli::DebugInfoOffset, gimli::DebugInfoOffset> = HashMap::new();
     // Build a struct type offset -> members map
     let mut struct_members: HashMap<gimli::DebugInfoOffset, Vec<(String, u64, u64, String)>> = HashMap::new();
 
-    // First pass: collect type names and struct members
+    // First pass: collect type names, sizes, and typedef/qualifier chains
     let mut units = dwarf.units();
     while let Ok(Some(header)) = units.next() {
         let unit = match dwarf.unit(header) {
@@ -1732,21 +1744,46 @@ fn parse_dwarf_symbols(buffer: &[u8]) -> HashMap<String, DwarfSymbolInfo> {
             let offset = entry.offset().to_debug_info_offset(&unit.header).unwrap_or(gimli::DebugInfoOffset(0));
 
             match entry.tag() {
-                gimli::DW_TAG_base_type | gimli::DW_TAG_typedef => {
+                gimli::DW_TAG_base_type => {
                     if let Some(name) = get_die_name(&dwarf, &unit, entry) {
                         type_map.insert(offset, name);
+                    }
+                    if let Some(size) = get_byte_size(entry) {
+                        type_size_map.insert(offset, size);
+                    }
+                }
+                gimli::DW_TAG_typedef => {
+                    if let Some(name) = get_die_name(&dwarf, &unit, entry) {
+                        type_map.insert(offset, name);
+                    }
+                    // Track chain: typedef_offset -> underlying type offset
+                    if let Some(underlying) = resolve_type_to_offset(&unit, entry) {
+                        type_indirection.insert(offset, underlying);
                     }
                 }
                 gimli::DW_TAG_structure_type => {
                     if let Some(name) = get_die_name(&dwarf, &unit, entry) {
                         type_map.insert(offset, format!("struct {}", name));
                     }
+                    if let Some(size) = get_byte_size(entry) {
+                        type_size_map.insert(offset, size);
+                    }
                 }
                 gimli::DW_TAG_pointer_type => {
                     type_map.insert(offset, "pointer".to_string());
+                    // pointer size from unit address size
+                    type_size_map.insert(offset, unit.encoding().address_size as u64);
                 }
                 gimli::DW_TAG_array_type => {
                     type_map.insert(offset, "array".to_string());
+                }
+                // Qualifiers: const, volatile, restrict — track for typedef chaining
+                gimli::DW_TAG_const_type
+                | gimli::DW_TAG_volatile_type
+                | gimli::DW_TAG_restrict_type => {
+                    if let Some(underlying) = resolve_type_to_offset(&unit, entry) {
+                        type_indirection.insert(offset, underlying);
+                    }
                 }
                 _ => {}
             }
@@ -1782,11 +1819,15 @@ fn parse_dwarf_symbols(buffer: &[u8]) -> HashMap<String, DwarfSymbolInfo> {
                     if let Some(struct_off) = current_struct_offset {
                         if let Some(member_name) = get_die_name(&dwarf, &unit, entry) {
                             let member_offset = get_member_location(entry);
-                            let member_type = resolve_type_to_offset(&unit, entry)
+                            let member_type_off = resolve_type_to_offset(&unit, entry);
+                            let member_type = member_type_off
                                 .and_then(|off| type_map.get(&off))
                                 .cloned()
                                 .unwrap_or_else(|| "unknown".to_string());
-                            let member_size = get_byte_size(entry).unwrap_or(0);
+                            // Resolve member size by chasing through type indirection
+                            let member_size = member_type_off
+                                .and_then(|off| resolve_size_through_chain(off, &type_size_map, &type_indirection))
+                                .unwrap_or(0);
 
                             struct_members.entry(struct_off).or_default().push(
                                 (member_name, member_offset, member_size, member_type)
@@ -1796,24 +1837,36 @@ fn parse_dwarf_symbols(buffer: &[u8]) -> HashMap<String, DwarfSymbolInfo> {
                 }
                 gimli::DW_TAG_variable => {
                     if let Some(var_name) = get_die_name(&dwarf, &unit, entry) {
-                        let type_name = resolve_type_to_offset(&unit, entry)
-                            .and_then(|off| {
-                                // If it's a struct, include member info
-                                if let Some(members) = struct_members.get(&off) {
-                                    let base_type = type_map.get(&off).cloned().unwrap_or_default();
+                        if let Some(direct_off) = resolve_type_to_offset(&unit, entry) {
+                            // Try to find a struct by chasing through typedef/qualifier chain
+                            let struct_off = resolve_struct_through_chain(
+                                direct_off, &type_indirection, &struct_members
+                            );
+                            let type_name = type_map.get(&direct_off).cloned()
+                                .unwrap_or_else(|| "unknown".to_string());
+
+                            if let Some(soff) = struct_off {
+                                if let Some(members) = struct_members.get(&soff) {
+                                    let base_type = type_map.get(&soff).cloned()
+                                        .or_else(|| type_map.get(&direct_off).cloned())
+                                        .unwrap_or_default();
                                     result.insert(var_name.clone(), DwarfSymbolInfo {
                                         type_name: base_type,
                                         members: members.clone(),
                                     });
                                 }
-                                type_map.get(&off).cloned()
-                            })
-                            .unwrap_or_else(|| "unknown".to_string());
+                            }
 
-                        result.entry(var_name).or_insert(DwarfSymbolInfo {
-                            type_name,
-                            members: Vec::new(),
-                        });
+                            result.entry(var_name).or_insert(DwarfSymbolInfo {
+                                type_name,
+                                members: Vec::new(),
+                            });
+                        } else {
+                            result.entry(var_name).or_insert(DwarfSymbolInfo {
+                                type_name: "unknown".to_string(),
+                                members: Vec::new(),
+                            });
+                        }
                     }
                 }
                 _ => {
@@ -1826,6 +1879,45 @@ fn parse_dwarf_symbols(buffer: &[u8]) -> HashMap<String, DwarfSymbolInfo> {
     }
 
     result
+}
+
+/// Chase through typedef/const/volatile/restrict indirection until we find a struct type.
+/// Returns the struct type offset if found, otherwise None.
+fn resolve_struct_through_chain(
+    start: gimli::DebugInfoOffset,
+    type_indirection: &HashMap<gimli::DebugInfoOffset, gimli::DebugInfoOffset>,
+    struct_members: &HashMap<gimli::DebugInfoOffset, Vec<(String, u64, u64, String)>>,
+) -> Option<gimli::DebugInfoOffset> {
+    let mut current = start;
+    for _ in 0..16 {
+        if struct_members.contains_key(&current) {
+            return Some(current);
+        }
+        match type_indirection.get(&current) {
+            Some(&next) => current = next,
+            None => return None,
+        }
+    }
+    None
+}
+
+/// Resolve byte size through typedef/qualifier chain.
+fn resolve_size_through_chain(
+    start: gimli::DebugInfoOffset,
+    type_size_map: &HashMap<gimli::DebugInfoOffset, u64>,
+    type_indirection: &HashMap<gimli::DebugInfoOffset, gimli::DebugInfoOffset>,
+) -> Option<u64> {
+    let mut current = start;
+    for _ in 0..16 {
+        if let Some(&size) = type_size_map.get(&current) {
+            return Some(size);
+        }
+        match type_indirection.get(&current) {
+            Some(&next) => current = next,
+            None => return None,
+        }
+    }
+    None
 }
 
 fn get_die_name(
