@@ -1033,3 +1033,53 @@ fn test_volatile_types_resolve_through_chain() {
         );
     }
 }
+
+#[test]
+fn test_volatile_array_symbols_get_correct_type_and_dim() {
+    // update_test.elf has known C variables with matching DWARF + ELF names
+    let symbols = core_load_elf_symbols(&format!("{}/bin/update_test.elf", fixtures_dir())).unwrap();
+
+    let with_dwarf: Vec<_> = symbols.iter()
+        .filter(|s| !s.is_struct_member && s.dwarf_type.is_some())
+        .collect();
+    println!("ELF symbols with DWARF type: {}", with_dwarf.len());
+    for sym in with_dwarf.iter().take(20) {
+        println!(
+            "  {} size={} a2l_type={} array_dim={} dwarf_type={:?}",
+            sym.name, sym.size, sym.suggested_a2l_type, sym.array_dim, sym.dwarf_type
+        );
+    }
+
+    // Check symbols with array dimensions
+    let arrays: Vec<_> = with_dwarf.iter()
+        .filter(|s| s.array_dim > 0)
+        .collect();
+    println!("\nArray symbols: {}", arrays.len());
+    for sym in &arrays {
+        println!(
+            "  {} size={} a2l_type={} array_dim={} dwarf_type={:?}",
+            sym.name, sym.size, sym.suggested_a2l_type, sym.array_dim, sym.dwarf_type
+        );
+    }
+
+    // Verify known symbols from update_test.c:
+    // float Characteristic_ValBlk[5] should be a float array
+    let valblk = with_dwarf.iter().find(|s| s.name == "Characteristic_ValBlk")
+        .expect("Characteristic_ValBlk should exist");
+    assert!(valblk.array_dim > 0, "Characteristic_ValBlk should be an array");
+    assert_eq!(valblk.suggested_a2l_type, "FLOAT32_IEEE",
+        "Characteristic_ValBlk should be FLOAT32_IEEE, got {}", valblk.suggested_a2l_type);
+    assert_eq!(valblk.array_dim, 5,
+        "Characteristic_ValBlk should have array_dim=5, got {}", valblk.array_dim);
+    println!("\nCharacteristic_ValBlk: a2l_type={} array_dim={} dwarf_type={:?}",
+        valblk.suggested_a2l_type, valblk.array_dim, valblk.dwarf_type);
+
+    // uint8_t Blob_2[256] should be a uint8 array
+    let blob = with_dwarf.iter().find(|s| s.name == "Blob_2")
+        .expect("Blob_2 should exist");
+    assert!(blob.array_dim > 0, "Blob_2 should be an array");
+    assert_eq!(blob.suggested_a2l_type, "UBYTE",
+        "Blob_2 element should be UBYTE, got {}", blob.suggested_a2l_type);
+    assert_eq!(blob.array_dim, 256,
+        "Blob_2 should have array_dim=256, got {}", blob.array_dim);
+}
