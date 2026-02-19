@@ -1,6 +1,6 @@
 # PLAN — OpenT_A2L-Forge
 
-**Last updated:** 2026-02-18
+**Last updated:** 2026-02-19
 
 ## Iteration 0 — Foundations
 - [x] Repo scaffolding, build, and CI basics
@@ -261,6 +261,47 @@
   - [x] Added byte size tracking for `DW_TAG_array_type`
   - [x] 3 Voyant ELF integration tests: struct member expansion, data type verification, A2L measurement creation
   - [x] All 12 Rust tests pass, all 22 E2E tests pass
+
+## Iteration 4.9 — CHARACTERISTIC Import, Arrays, Enums & Large Files
+- [x] R23: Array support with MATRIX_DIM
+  - [x] DWARF DW_TAG_array_type + DW_TAG_subrange_type parsing for element type/count
+  - [x] Element type resolution through typedef chain for correct A2L type inference
+  - [x] MATRIX_DIM set on Measurement/Characteristic for array symbols
+  - [x] Overflow protection with checked_add for DW_AT_upper_bound
+  - [x] Display type as "element_type[N]" in DWARF type column
+  - [x] SRS: docs/srs/SRS-R12-Array-Support.md
+  - [x] Test: test_array_members_get_matrix_dim
+- [x] R24: CHARACTERISTIC import from ELF (instead of MEASUREMENT)
+  - [x] `core_create_characteristics()` — VALUE for scalars, VAL_BLK for arrays
+  - [x] Auto-create RECORD_LAYOUT (__val_TYPE) with FncValues
+  - [x] Frontend updated: `create_characteristics_from_elf` Tauri command
+  - [x] Conflict detection checks both measurements AND characteristics
+  - [x] SRS: docs/srs/SRS-R13-Characteristic-Import.md
+  - [x] Tests: test_create_characteristics_from_elf_symbols, test_create_characteristics_replaces_existing
+- [x] R25: Enum COMPU_METHOD derivation from DWARF
+  - [x] DW_TAG_enumerator parsing for enum name/value pairs
+  - [x] Enum resolution through typedef chain for variables and struct members
+  - [x] Auto-create COMPU_VTAB (TAB_VERB) + COMPU_METHOD for enum types
+  - [x] Characteristic conversion auto-set to generated COMPU_METHOD
+  - [x] SRS: docs/srs/SRS-R14-Enum-CompuMethod.md
+  - [x] Test: test_enum_compu_method_creation
+- [x] R26: ELF update propagation for arrays and enums
+  - [x] `core_update_ecu_addresses` extended to update characteristics (address, array dims)
+  - [x] COMPU_VTAB/COMPU_METHOD overwritten on ELF change for enum types
+  - [x] Measurement MATRIX_DIM updated on array size change
+- [x] R27: Entity list performance for large A2L files
+  - [x] Search bypasses rendering limit — all matching items shown when search active
+  - [x] Default batch size increased to 500
+  - [x] "Load all" button + "Load 500 more (N remaining)" display
+  - [x] SRS: docs/srs/SRS-R15-Entity-List-Performance.md
+- [x] R28: SRS documentation for struct, array, characteristic, enum features
+  - [x] SRS-R11-Struct-Member-Expansion.md
+  - [x] SRS-R12-Array-Support.md
+  - [x] SRS-R13-Characteristic-Import.md
+  - [x] SRS-R14-Enum-CompuMethod.md
+  - [x] SRS-R15-Entity-List-Performance.md
+  - [x] SRS-INDEX.md updated with R11-R15
+- [x] All 16 Rust integration tests pass, all 22 E2E tests pass
 
 ## Iteration 5 — Validation & Integrity (Series E)
 - [ ] E1: Validation engine

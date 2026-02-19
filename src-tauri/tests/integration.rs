@@ -1,8 +1,9 @@
 use a2lfile::A2lObjectName;
 use opent_a2l_forge_lib::{
-    core_check_conflicts, core_create_measurements, core_export_a2l, core_load_a2l_from_path,
-    core_load_a2l_from_string, core_load_elf_symbols, core_update_ecu_addresses,
-    parse_dwarf_symbols, SymbolWithMapping,
+    core_check_conflicts, core_create_characteristics, core_create_measurements,
+    core_export_a2l, core_load_a2l_from_path, core_load_a2l_from_string,
+    core_load_elf_symbols, core_update_ecu_addresses, parse_dwarf_symbols,
+    SymbolWithMapping,
 };
 
 fn fixtures_dir() -> String {
@@ -131,6 +132,8 @@ fn test_create_measurements_from_real_elf() {
             conversion: None,
             resolution: None,
             accuracy: None,
+            array_dim: s.array_dim,
+            enum_values: s.enum_values.clone(),
         })
         .collect();
 
@@ -181,6 +184,8 @@ fn test_replace_duplicate_measurement() {
         conversion: None,
         resolution: None,
         accuracy: None,
+        array_dim: 0,
+        enum_values: vec![],
     };
 
     // Create once
@@ -236,6 +241,8 @@ fn test_check_conflicts_with_real_data() {
             conversion: None,
             resolution: None,
             accuracy: None,
+            array_dim: 0,
+            enum_values: vec![],
         })
         .collect();
 
@@ -275,6 +282,8 @@ fn test_export_contains_imported_measurements() {
             conversion: None,
             resolution: None,
             accuracy: None,
+            array_dim: 0,
+            enum_values: vec![],
         },
         SymbolWithMapping {
             name: "beta_actuator".to_string(),
@@ -285,6 +294,8 @@ fn test_export_contains_imported_measurements() {
             conversion: None,
             resolution: None,
             accuracy: None,
+            array_dim: 0,
+            enum_values: vec![],
         },
     ];
 
@@ -455,6 +466,8 @@ fn test_voyant_struct_members_as_a2l_measurements() {
             conversion: None,
             resolution: None,
             accuracy: None,
+            array_dim: s.array_dim,
+            enum_values: s.enum_values.clone(),
         })
         .collect();
 
@@ -544,8 +557,8 @@ fn test_voyant_dwarf_parsing_directly() {
             info.type_name,
             info.members.len()
         );
-        for (mname, offset, size, mtype) in &info.members {
-            println!("    .{} offset={} size={} type={}", mname, offset, size, mtype);
+        for member in &info.members {
+            println!("    .{} offset={} size={} type={} array_dim={}", member.name, member.offset, member.size, member.type_name, member.array_dim);
         }
     }
 
@@ -575,6 +588,285 @@ fn test_voyant_dwarf_parsing_directly() {
             info.members.len()
         );
     }
+}
+
+// ─── Array MATRIX_DIM test ──────────────────────────────────────────────────
+
+#[test]
+fn test_array_members_get_matrix_dim() {
+    let voyant_elf =
+        r"C:\dev\interview\voyant-photonics\VoyantTakeHomeAssignment\build\Debug\VoyantTakeHomeAssignment.elf";
+    if !std::path::Path::new(voyant_elf).exists() {
+        println!("Skipping: Voyant ELF not found");
+        return;
+    }
+
+    let symbols = core_load_elf_symbols(voyant_elf).unwrap();
+
+    // Find g_cs.samples — should be uint16_t[200] array
+    let samples = symbols.iter().find(|s| s.name == "g_cs.samples");
+    assert!(samples.is_some(), "g_cs.samples should exist in ELF symbols");
+    let samples = samples.unwrap();
+    assert!(
+        samples.array_dim > 0,
+        "g_cs.samples should have array_dim > 0, got {}",
+        samples.array_dim
+    );
+    println!(
+        "g_cs.samples: array_dim={}, type={}, a2l_type={}",
+        samples.array_dim, samples.dwarf_type.as_deref().unwrap_or("none"), samples.suggested_a2l_type
+    );
+
+    // Create A2L and import
+    let a2l_text = r#"ASAP2_VERSION 1 71
+/begin PROJECT test_proj ""
+  /begin MODULE test_mod ""
+  /end MODULE
+/end PROJECT"#;
+    let (mut a2l, _) = core_load_a2l_from_string(a2l_text).unwrap();
+
+    let mapping = SymbolWithMapping {
+        name: samples.name.clone(),
+        address: samples.address,
+        a2l_type: samples.suggested_a2l_type.clone(),
+        lower_limit: samples.suggested_limits.0,
+        upper_limit: samples.suggested_limits.1,
+        conversion: None,
+        resolution: None,
+        accuracy: None,
+        array_dim: samples.array_dim,
+        enum_values: vec![],
+    };
+
+    core_create_measurements(&mut a2l, None, &[mapping]).unwrap();
+
+    let module = &a2l.project.module[0];
+    let meas = module.measurement.iter().find(|m| m.get_name() == "g_cs.samples").unwrap();
+
+    // Verify MATRIX_DIM is set
+    assert!(
+        meas.matrix_dim.is_some(),
+        "g_cs.samples should have matrix_dim set"
+    );
+    let md = meas.matrix_dim.as_ref().unwrap();
+    assert_eq!(
+        md.dim_list.len(),
+        1,
+        "matrix_dim should have 1 dimension"
+    );
+    assert_eq!(
+        md.dim_list[0] as u64,
+        samples.array_dim,
+        "matrix_dim dimension should match array_dim"
+    );
+    println!(
+        "g_cs.samples MATRIX_DIM = {:?}",
+        md.dim_list
+    );
+
+    // Verify export contains MATRIX_DIM
+    let exported = core_export_a2l(&a2l);
+    assert!(
+        exported.contains("MATRIX_DIM"),
+        "Export should contain MATRIX_DIM for array member"
+    );
+    assert!(
+        exported.contains(&format!("{}", samples.array_dim)),
+        "Export should contain the array dimension value"
+    );
+    println!("Array MATRIX_DIM test passed!");
+}
+
+// ─── CHARACTERISTIC creation tests ──────────────────────────────────────────
+
+#[test]
+fn test_create_characteristics_from_elf_symbols() {
+    let a2l_text = r#"ASAP2_VERSION 1 71
+/begin PROJECT test_proj ""
+  /begin MODULE test_mod ""
+  /end MODULE
+/end PROJECT"#;
+
+    let (mut a2l, _) = core_load_a2l_from_string(a2l_text).unwrap();
+
+    let symbols = vec![
+        SymbolWithMapping {
+            name: "g_vd.last_dac_value".to_string(),
+            address: 0x2000_0100,
+            a2l_type: "UWORD".to_string(),
+            lower_limit: 0.0,
+            upper_limit: 65535.0,
+            conversion: None,
+            resolution: None,
+            accuracy: None,
+            array_dim: 0,
+            enum_values: vec![],
+        },
+        SymbolWithMapping {
+            name: "g_cs.samples".to_string(),
+            address: 0x2000_0200,
+            a2l_type: "UWORD".to_string(),
+            lower_limit: 0.0,
+            upper_limit: 65535.0,
+            conversion: None,
+            resolution: None,
+            accuracy: None,
+            array_dim: 200,
+            enum_values: vec![],
+        },
+        SymbolWithMapping {
+            name: "g_oc.in_current_value_mA".to_string(),
+            address: 0x2000_0300,
+            a2l_type: "FLOAT32_IEEE".to_string(),
+            lower_limit: -1000.0,
+            upper_limit: 1000.0,
+            conversion: None,
+            resolution: None,
+            accuracy: None,
+            array_dim: 0,
+            enum_values: vec![],
+        },
+    ];
+
+    core_create_characteristics(&mut a2l, None, &symbols).unwrap();
+
+    let module = &a2l.project.module[0];
+    assert_eq!(module.characteristic.len(), 3, "Should have 3 characteristics");
+
+    // Scalar → VALUE type
+    let vd = module.characteristic.iter().find(|c| c.get_name() == "g_vd.last_dac_value").unwrap();
+    assert_eq!(format!("{:?}", vd.characteristic_type), "Value");
+    assert_eq!(vd.address, 0x2000_0100);
+    assert!(vd.matrix_dim.is_none());
+
+    // Array → VAL_BLK type with MATRIX_DIM
+    let cs = module.characteristic.iter().find(|c| c.get_name() == "g_cs.samples").unwrap();
+    assert_eq!(format!("{:?}", cs.characteristic_type), "ValBlk");
+    assert_eq!(cs.address, 0x2000_0200);
+    assert!(cs.matrix_dim.is_some());
+    assert_eq!(cs.matrix_dim.as_ref().unwrap().dim_list, vec![200u16]);
+
+    // Float → VALUE type
+    let oc = module.characteristic.iter().find(|c| c.get_name() == "g_oc.in_current_value_mA").unwrap();
+    assert_eq!(format!("{:?}", oc.characteristic_type), "Value");
+    assert_eq!(oc.address, 0x2000_0300);
+
+    // Record layouts should be auto-created
+    assert!(module.record_layout.iter().any(|r| r.get_name() == "__val_UWORD"),
+        "Should have UWORD record layout");
+    assert!(module.record_layout.iter().any(|r| r.get_name() == "__val_FLOAT32_IEEE"),
+        "Should have FLOAT32_IEEE record layout");
+
+    // Verify export
+    let exported = core_export_a2l(&a2l);
+    assert!(exported.contains("/begin CHARACTERISTIC g_vd.last_dac_value"));
+    assert!(exported.contains("/begin CHARACTERISTIC g_cs.samples"));
+    assert!(exported.contains("MATRIX_DIM"));
+    assert!(exported.contains("__val_UWORD"),
+        "Export should reference __val_UWORD record layout");
+
+    println!("CHARACTERISTIC creation test passed!");
+}
+
+#[test]
+fn test_create_characteristics_replaces_existing() {
+    let a2l_text = r#"ASAP2_VERSION 1 71
+/begin PROJECT test_proj ""
+  /begin MODULE test_mod ""
+  /end MODULE
+/end PROJECT"#;
+
+    let (mut a2l, _) = core_load_a2l_from_string(a2l_text).unwrap();
+
+    let sym = SymbolWithMapping {
+        name: "test_var".to_string(),
+        address: 0x1000,
+        a2l_type: "UBYTE".to_string(),
+        lower_limit: 0.0,
+        upper_limit: 255.0,
+        conversion: None,
+        resolution: None,
+        accuracy: None,
+        array_dim: 0,
+        enum_values: vec![],
+    };
+
+    // Create once
+    core_create_characteristics(&mut a2l, None, &[sym.clone()]).unwrap();
+    assert_eq!(a2l.project.module[0].characteristic.len(), 1);
+
+    // Create again with different address — should replace
+    let sym2 = SymbolWithMapping {
+        address: 0x2000,
+        ..sym
+    };
+    core_create_characteristics(&mut a2l, None, &[sym2]).unwrap();
+
+    let chars: Vec<_> = a2l.project.module[0].characteristic.iter()
+        .filter(|c| c.get_name() == "test_var").collect();
+    assert_eq!(chars.len(), 1, "Should have exactly 1 characteristic");
+    assert_eq!(chars[0].address, 0x2000, "Should have updated address");
+}
+
+#[test]
+fn test_enum_compu_method_creation() {
+    let a2l_text = r#"ASAP2_VERSION 1 71
+/begin PROJECT test_proj ""
+  /begin MODULE test_mod ""
+  /end MODULE
+/end PROJECT"#;
+
+    let (mut a2l, _) = core_load_a2l_from_string(a2l_text).unwrap();
+
+    let sym = SymbolWithMapping {
+        name: "g_sc.state".to_string(),
+        address: 0x2000_0400,
+        a2l_type: "UBYTE".to_string(),
+        lower_limit: 0.0,
+        upper_limit: 255.0,
+        conversion: None,
+        resolution: None,
+        accuracy: None,
+        array_dim: 0,
+        enum_values: vec![
+            ("STATE_IDLE".to_string(), 0),
+            ("STATE_RUNNING".to_string(), 1),
+            ("STATE_ERROR".to_string(), 2),
+            ("STATE_SHUTDOWN".to_string(), 3),
+        ],
+    };
+
+    core_create_characteristics(&mut a2l, None, &[sym]).unwrap();
+
+    let module = &a2l.project.module[0];
+
+    // Characteristic should exist
+    let c = module.characteristic.iter().find(|c| c.get_name() == "g_sc.state").unwrap();
+    assert_eq!(c.conversion, "__cm_g_sc_state", "Should reference auto-generated COMPU_METHOD");
+
+    // COMPU_METHOD should exist
+    let cm = module.compu_method.iter().find(|m| m.get_name() == "__cm_g_sc_state").unwrap();
+    assert_eq!(format!("{:?}", cm.conversion_type), "TabVerb");
+    assert!(cm.compu_tab_ref.is_some());
+    assert_eq!(cm.compu_tab_ref.as_ref().unwrap().conversion_table, "__vtab_g_sc_state");
+
+    // COMPU_VTAB should exist with correct values
+    let vtab = module.compu_vtab.iter().find(|v| v.get_name() == "__vtab_g_sc_state").unwrap();
+    assert_eq!(vtab.number_value_pairs, 4);
+    assert_eq!(vtab.value_pairs.len(), 4);
+    assert_eq!(vtab.value_pairs[0].in_val, 0.0);
+    assert_eq!(vtab.value_pairs[0].out_val, "STATE_IDLE");
+    assert_eq!(vtab.value_pairs[3].in_val, 3.0);
+    assert_eq!(vtab.value_pairs[3].out_val, "STATE_SHUTDOWN");
+
+    // Verify export
+    let exported = core_export_a2l(&a2l);
+    assert!(exported.contains("COMPU_METHOD"), "Export should contain COMPU_METHOD");
+    assert!(exported.contains("COMPU_VTAB"), "Export should contain COMPU_VTAB");
+    assert!(exported.contains("STATE_IDLE"), "Export should contain enum value STATE_IDLE");
+    assert!(exported.contains("STATE_SHUTDOWN"), "Export should contain enum value STATE_SHUTDOWN");
+
+    println!("Enum COMPU_METHOD test passed!");
 }
 
 // ─── Update ECU addresses test ──────────────────────────────────────────────

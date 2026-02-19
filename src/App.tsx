@@ -144,6 +144,8 @@ type ElfSymbol = {
   dwarf_type: string | null;
   is_struct_member: boolean;
   parent_struct: string | null;
+  array_dim: number;
+  enum_values: [string, number][];
 };
 
 type SymbolWithMapping = {
@@ -155,6 +157,8 @@ type SymbolWithMapping = {
   conversion?: string;
   resolution?: number;
   accuracy?: number;
+  array_dim?: number;
+  enum_values?: [string, number][];
 };
 
 type SymbolConflict = {
@@ -468,7 +472,8 @@ function App() {
     elfSymbols.filter(s => s.address_warning).length,
   [elfSymbols]);
 
-  const DEFAULT_SECTION_LIMIT = 200;
+  const DEFAULT_SECTION_LIMIT = 500;
+  const SEARCH_ACTIVE_LIMIT = Infinity;
   const RECENT_A2L_KEY = "opent-a2l-recents";
   const RECENT_ELF_KEY = "opent-elf-recents";
 
@@ -805,6 +810,8 @@ function App() {
           conversion: "NO_COMPU_METHOD",
           resolution: 1,
           accuracy: 0,
+          array_dim: s.array_dim || 0,
+          enum_values: s.enum_values || [],
       }));
 
       // Show preview dialog
@@ -874,7 +881,7 @@ function App() {
       }
 
       try {
-          const result = await invoke<EntityUpdateResult>("create_measurements_with_mapping", {
+          const result = await invoke<EntityUpdateResult>("create_characteristics_from_elf", {
               moduleName: selectedModule || metadata.module_names[0],
               symbols: symbols,
           });
@@ -885,7 +892,7 @@ function App() {
           const tree = await invoke<A2lTree>("list_a2l_tree");
           setA2lTree(tree);
 
-          pushStatus("success", `Added ${symbols.length} measurements.`);
+          pushStatus("success", `Added ${symbols.length} characteristics.`);
           setIsDirty(true);
           setSelectedElfSymbols(new Set());
       } catch (e) {
@@ -1098,7 +1105,8 @@ function App() {
                                     </Stack>
                                 }>
                                     {module.sections.map(section => {
-                                         const limit = sectionItemLimit[section.id] ?? DEFAULT_SECTION_LIMIT;
+                                         const isSearching = searchQuery.trim().length > 0;
+                                         const limit = isSearching ? SEARCH_ACTIVE_LIMIT : (sectionItemLimit[section.id] ?? DEFAULT_SECTION_LIMIT);
                                          const visibleItems = expandedItems.includes(`section-${section.id}`) ? section.items.slice(0, limit) : [];
                                          const remaining = section.items.length - visibleItems.length;
                                          return (
@@ -1116,16 +1124,28 @@ function App() {
                                                     } />
                                                 ))}
                                                 {remaining > 0 && (
-                                                     <Button 
-                                                        size="small" 
-                                                        sx={{ ml: 2, fontSize: 10, justifyContent: "flex-start" }} 
+                                                    <Stack direction="row" spacing={1} sx={{ ml: 2, mt: 0.5 }}>
+                                                     <Button
+                                                        size="small"
+                                                        sx={{ fontSize: 10, justifyContent: "flex-start" }}
                                                         onClick={(e) => {
                                                             e.stopPropagation();
-                                                            setSectionItemLimit(c => ({...c, [section.id]: (c[section.id] ?? DEFAULT_SECTION_LIMIT) + 200 }));
+                                                            setSectionItemLimit(c => ({...c, [section.id]: (c[section.id] ?? DEFAULT_SECTION_LIMIT) + 500 }));
                                                         }}
                                                      >
-                                                        Load more...
+                                                        Load 500 more ({remaining} remaining)
                                                      </Button>
+                                                     <Button
+                                                        size="small"
+                                                        sx={{ fontSize: 10, justifyContent: "flex-start" }}
+                                                        onClick={(e) => {
+                                                            e.stopPropagation();
+                                                            setSectionItemLimit(c => ({...c, [section.id]: Infinity }));
+                                                        }}
+                                                     >
+                                                        Load all
+                                                     </Button>
+                                                    </Stack>
                                                 )}
                                             </TreeItem>
                                          );

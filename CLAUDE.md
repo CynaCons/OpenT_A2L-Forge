@@ -48,6 +48,6 @@ npx playwright test
 - **Smoke test**: Always run `npm run dev` or `npm run tauri dev` before reporting completion to verify no crashes.
 - **Fixtures**: A2L fixtures in `external/a2ltool/fixtures/a2l/`, ELF fixtures in `external/a2ltool/fixtures/elf/`.
 - **Core functions**: Backend logic is in `core_*` functions (no Tauri dependency). Tauri commands are thin wrappers.
-- **TaskList/TodoList**: Always use TaskCreate/TaskUpdate/TaskList tools to track work progress. Never work without a task list.
+- **⚠️ MANDATORY: TaskList/TodoList**: ALWAYS use TaskCreate/TaskUpdate/TaskList tools to track work progress for ANY multi-step task. Create tasks BEFORE starting work, mark as in_progress when starting, completed when done. Never work on multi-step tasks without a task list. This is a hard requirement.
 - **SRS references**: Always refer to existing SRS documents and update them when features change. Create new SRS docs for new features.
 - **PLAN.md format**: Always update PLAN.md by appending sub-iterations at the bottom. Use only checklist elements (`- [x]`/`- [ ]`) and version summary one-liners. Never rewrite existing entries.
