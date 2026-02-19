@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, type Dispatch, type SetStateAction } from "react";
+import { useEffect, useMemo, useRef, useState, useCallback, type Dispatch, type SetStateAction } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { listen } from "@tauri-apps/api/event";
@@ -64,6 +64,7 @@ import {
   FilterNone,
   Save as SaveIcon,
   NoteAdd as NoteAddIcon,
+  Delete as DeleteIcon,
 } from "@mui/icons-material";
 
 import "./titlebar.css";
@@ -303,12 +304,14 @@ function App() {
   const [isBusy, setIsBusy] = useState(false);
   const [elfFileName, setElfFileName] = useState("");
   const [a2lTree, setA2lTree] = useState<A2lTree | null>(null);
-  const [selectedTreeItemId, setSelectedTreeItemId] = useState<string | null>(null);
+  const [selectedTreeItemIds, setSelectedTreeItemIds] = useState<string[]>([]);
   const [expandedItems, setExpandedItems] = useState<string[]>([]);
   const [sectionItemLimit, setSectionItemLimit] = useState<Record<string, number>>({});
   const [recentA2lFiles, setRecentA2lFiles] = useState<RecentFile[]>([]);
   const [recentElfFiles, setRecentElfFiles] = useState<RecentFile[]>([]);
   const [isEditing, setIsEditing] = useState(false);
+  const [showDeleteDialog, setShowDeleteDialog] = useState(false);
+  const lastClickedTreeItemRef = useRef<string | null>(null);
   const [elfSymbols, setElfSymbols] = useState<ElfSymbol[]>([]);
   const [selectedElfSymbols, setSelectedElfSymbols] = useState<Set<string>>(new Set());
   const [elfSearchQuery, setElfSearchQuery] = useState('');
@@ -523,19 +526,69 @@ function App() {
     return map;
   }, [a2lTree]);
 
-  const selectedItem = selectedTreeItemId ? treeItemLookup.get(selectedTreeItemId) ?? null : null;
+  const selectedItem = selectedTreeItemIds.length === 1 ? treeItemLookup.get(selectedTreeItemIds[0]) ?? null : null;
+
+  // Build a flat ordered list of visible item IDs for shift-select range
+  const flatVisibleItemIds = useMemo(() => {
+    if (!filteredTree) return [] as string[];
+    const ids: string[] = [];
+    filteredTree.modules.forEach((module) => {
+      module.sections.forEach((section) => {
+        const isSearching = searchQuery.trim().length > 0;
+        const limit = isSearching ? 200 : (sectionItemLimit[section.id] ?? 50);
+        const visible = section.items.slice(0, limit);
+        visible.forEach((item) => ids.push(`item-${item.id}`));
+      });
+    });
+    return ids;
+  }, [filteredTree, searchQuery, sectionItemLimit]);
+
+  const handleTreeItemClick = useCallback((itemId: string, event: React.MouseEvent) => {
+    // Only allow multi-select on leaf items (item-*)
+    if (!itemId.startsWith("item-")) return;
+
+    if (event.shiftKey && lastClickedTreeItemRef.current) {
+      // Shift-click: select range
+      const lastIdx = flatVisibleItemIds.indexOf(lastClickedTreeItemRef.current);
+      const curIdx = flatVisibleItemIds.indexOf(itemId);
+      if (lastIdx >= 0 && curIdx >= 0) {
+        const start = Math.min(lastIdx, curIdx);
+        const end = Math.max(lastIdx, curIdx);
+        const rangeIds = flatVisibleItemIds.slice(start, end + 1);
+        setSelectedTreeItemIds(rangeIds);
+        return;
+      }
+    }
+
+    if (event.ctrlKey || event.metaKey) {
+      // Ctrl-click: toggle individual item
+      setSelectedTreeItemIds((prev) =>
+        prev.includes(itemId)
+          ? prev.filter((id) => id !== itemId)
+          : [...prev, itemId]
+      );
+    } else {
+      // Normal click: single select
+      setSelectedTreeItemIds([itemId]);
+    }
+    lastClickedTreeItemRef.current = itemId;
+  }, [flatVisibleItemIds]);
 
   useEffect(() => {
     if (!a2lTree) {
-      setSelectedTreeItemId(null);
+      setSelectedTreeItemIds((prev) => prev.length === 0 ? prev : []);
       return;
     }
-    if (selectedTreeItemId && treeItemLookup.has(selectedTreeItemId)) {
+    if (selectedTreeItemIds.length > 0 && selectedTreeItemIds.some((id) => treeItemLookup.has(id))) {
       return;
     }
     const firstItem = a2lTree.modules[0]?.sections[0]?.items[0];
-    setSelectedTreeItemId(firstItem ? `item-${firstItem.id}` : null);
-  }, [a2lTree, selectedTreeItemId, treeItemLookup]);
+    if (firstItem) {
+      setSelectedTreeItemIds([`item-${firstItem.id}`]);
+    } else {
+      setSelectedTreeItemIds((prev) => prev.length === 0 ? prev : []);
+    }
+  }, [a2lTree, selectedTreeItemIds, treeItemLookup]);
 
   useEffect(() => {
     if (!a2lTree) {
@@ -930,6 +983,34 @@ function App() {
     }
   }
 
+  // --- Delete entities ---
+  const selectedDeletableItems = useMemo(() => {
+    return selectedTreeItemIds
+      .map((id) => treeItemLookup.get(id))
+      .filter((item): item is A2lTreeItem => item != null);
+  }, [selectedTreeItemIds, treeItemLookup]);
+
+  async function handleDeleteEntities() {
+    if (selectedDeletableItems.length === 0) return;
+    setShowDeleteDialog(false);
+    setIsBusy(true);
+    try {
+      const entities = selectedDeletableItems.map((item) => ({
+        kind: item.kind,
+        name: item.name,
+      }));
+      const tree = await invoke<A2lTree>("delete_entities", { entities });
+      setA2lTree(tree);
+      setSelectedTreeItemIds([]);
+      setIsDirty(true);
+      pushStatus("success", `Deleted ${entities.length} ${entities.length === 1 ? "entity" : "entities"}.`);
+    } catch (e) {
+      pushStatus("error", `Delete failed: ${e}`);
+    } finally {
+      setIsBusy(false);
+    }
+  }
+
   // --- Keyboard Shortcuts ---
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
@@ -940,6 +1021,10 @@ function App() {
         if (e.key === "n") { e.preventDefault(); handleCreateA2l(); }
       }
       if (e.key === "Escape" && isEditing) { setIsEditing(false); }
+      if (e.key === "Delete" && selectedDeletableItems.length > 0 && !isEditing) {
+        e.preventDefault();
+        setShowDeleteDialog(true);
+      }
     };
     window.addEventListener("keydown", handler);
     return () => window.removeEventListener("keydown", handler);
@@ -1028,6 +1113,13 @@ function App() {
                                 <IconButton size="small" data-testid="btn-save-a2l" onClick={handleSaveA2l} aria-label="Save A2L"><SaveIcon fontSize="small" /></IconButton>
                             </Tooltip>
                         )}
+                        {selectedDeletableItems.length > 0 && (
+                            <Tooltip title={`Delete selected (${selectedDeletableItems.length})`}>
+                                <IconButton size="small" data-testid="btn-delete-entities" onClick={() => setShowDeleteDialog(true)} aria-label="Delete selected" color="error">
+                                    <DeleteIcon fontSize="small" />
+                                </IconButton>
+                            </Tooltip>
+                        )}
                     </Stack>
                 </Box>
                 
@@ -1079,11 +1171,9 @@ function App() {
                 {metadata && filteredTree && (
                     <Box sx={{ flex: 1, overflow: "auto" }} data-testid="entity-tree">
                         <SimpleTreeView
-                            selectedItems={selectedTreeItemId ?? undefined}
-                            onSelectedItemsChange={(_, itemIds) => {
-                                const next = Array.isArray(itemIds) ? itemIds[0] : itemIds;
-                                setSelectedTreeItemId(next ?? null);
-                            }}
+                            multiSelect
+                            selectedItems={selectedTreeItemIds}
+                            onSelectedItemsChange={() => { /* handled by onClick on TreeItem */ }}
                             expandedItems={expandedItems}
                             onExpandedItemsChange={(_, itemIds) => setExpandedItems(itemIds)}
                             slots={{
@@ -1114,7 +1204,9 @@ function App() {
                                                 <Typography variant="caption" color="text.secondary">{section.title} <span style={{opacity: 0.5}}>({section.items.length})</span></Typography>
                                             }>
                                                 {visibleItems.map(item => (
-                                                    <TreeItem key={item.id} itemId={`item-${item.id}`} label={
+                                                    <TreeItem key={item.id} itemId={`item-${item.id}`}
+                                                        onClick={(e) => { e.stopPropagation(); handleTreeItemClick(`item-${item.id}`, e); }}
+                                                        label={
                                                         <Tooltip title={item.description || ""} placement="right" enterDelay={500}>
                                                             <Stack direction="row" alignItems="center" spacing={1}>
                                                                 <Box sx={{ display: "flex" }}>{getKindIcon(item.kind)}</Box>
@@ -1510,6 +1602,27 @@ function App() {
     }
 
     if (!selectedItem) {
+        // Multi-select info panel
+        if (selectedDeletableItems.length > 1) {
+            return (
+                <Box sx={{ display: "flex", flex: 1, alignItems: "center", justifyContent: "center", flexDirection: "column" }}>
+                    <DataObject sx={{ fontSize: 64, mb: 2, color: "#555" }} />
+                    <Typography variant="h5" sx={{ color: "#aaa", mb: 1 }}>{selectedDeletableItems.length} entities selected</Typography>
+                    <Typography variant="body2" sx={{ color: "#666", mb: 3 }}>
+                        Use the Delete key or the delete button in the toolbar to remove selected entities.
+                    </Typography>
+                    <Button
+                        variant="outlined"
+                        color="error"
+                        startIcon={<DeleteIcon />}
+                        data-testid="btn-delete-selected"
+                        onClick={() => setShowDeleteDialog(true)}
+                    >
+                        Delete {selectedDeletableItems.length} entities
+                    </Button>
+                </Box>
+            );
+        }
         return (
             <Box sx={{ display: "flex", flex: 1, alignItems: "center", justifyContent: "center", flexDirection: "column" }}>
                 <DataObject sx={{ fontSize: 64, mb: 2, color: "#333" }} />
@@ -1850,6 +1963,29 @@ function App() {
         </Dialog>
 
         {/* Unsaved Changes Dialog */}
+        {/* Delete Confirmation Dialog */}
+        <Dialog open={showDeleteDialog} onClose={() => setShowDeleteDialog(false)} data-testid="delete-dialog">
+            <DialogTitle>Delete {selectedDeletableItems.length === 1 ? "Entity" : `${selectedDeletableItems.length} Entities`}</DialogTitle>
+            <DialogContent>
+                <Typography sx={{ mb: 2 }}>
+                    Are you sure you want to delete the following {selectedDeletableItems.length === 1 ? "entity" : "entities"}? This action cannot be undone.
+                </Typography>
+                <Box sx={{ maxHeight: 200, overflow: "auto", bgcolor: "#1a1a1a", borderRadius: 1, p: 1 }}>
+                    {selectedDeletableItems.map((item) => (
+                        <Stack key={item.id} direction="row" spacing={1} alignItems="center" sx={{ py: 0.5 }}>
+                            {getKindIcon(item.kind)}
+                            <Typography variant="body2" sx={{ fontFamily: '"JetBrains Mono", monospace', fontSize: 12 }}>{item.name}</Typography>
+                            <Chip label={item.kind} size="small" sx={{ height: 18, fontSize: 10 }} />
+                        </Stack>
+                    ))}
+                </Box>
+            </DialogContent>
+            <DialogActions>
+                <Button onClick={() => setShowDeleteDialog(false)}>Cancel</Button>
+                <Button onClick={handleDeleteEntities} color="error" variant="contained" data-testid="btn-confirm-delete">Delete</Button>
+            </DialogActions>
+        </Dialog>
+
         <Dialog open={showUnsavedDialog} onClose={() => setShowUnsavedDialog(false)}>
             <DialogTitle>Unsaved Changes</DialogTitle>
             <DialogContent>

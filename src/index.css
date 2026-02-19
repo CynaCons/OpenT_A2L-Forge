@@ -13,7 +13,7 @@ body {
   width: 100vw;
   height: 100vh;
   overflow: hidden;
-  user-select: none;
+  user-select: text;
   -webkit-font-smoothing: antialiased;
 }
 
@@ -41,6 +41,7 @@ body {
 .MuiTreeItem-content {
   padding: 4px 8px !important;
   border-radius: 4px;
+  user-select: none;
 }
 .MuiTreeItem-label {
   font-size: 13px !important;

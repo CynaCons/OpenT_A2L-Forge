@@ -1470,6 +1470,139 @@ fn update_entity_name(
     })
 }
 
+#[derive(Deserialize)]
+pub struct DeleteEntityRequest {
+    pub kind: String,
+    pub name: String,
+}
+
+pub fn core_delete_entities(
+    a2l: &mut a2lfile::A2lFile,
+    entities: &[DeleteEntityRequest],
+) -> usize {
+    let mut deleted = 0usize;
+    for module in a2l.project.module.iter_mut() {
+        for req in entities {
+            let before: usize;
+            match req.kind.as_str() {
+                "Measurement" => {
+                    before = module.measurement.len();
+                    module.measurement.retain(|m| m.get_name() != req.name);
+                    deleted += before - module.measurement.len();
+                }
+                "Characteristic" => {
+                    before = module.characteristic.len();
+                    module.characteristic.retain(|c| c.get_name() != req.name);
+                    deleted += before - module.characteristic.len();
+                }
+                "AxisPts" => {
+                    before = module.axis_pts.len();
+                    module.axis_pts.retain(|a| a.get_name() != req.name);
+                    deleted += before - module.axis_pts.len();
+                }
+                "CompuMethod" => {
+                    before = module.compu_method.len();
+                    module.compu_method.retain(|c| c.get_name() != req.name);
+                    deleted += before - module.compu_method.len();
+                }
+                "CompuTab" => {
+                    before = module.compu_tab.len();
+                    module.compu_tab.retain(|c| c.get_name() != req.name);
+                    deleted += before - module.compu_tab.len();
+                }
+                "CompuVtab" => {
+                    before = module.compu_vtab.len();
+                    module.compu_vtab.retain(|c| c.get_name() != req.name);
+                    deleted += before - module.compu_vtab.len();
+                }
+                "CompuVtabRange" => {
+                    before = module.compu_vtab_range.len();
+                    module.compu_vtab_range.retain(|c| c.get_name() != req.name);
+                    deleted += before - module.compu_vtab_range.len();
+                }
+                "RecordLayout" => {
+                    before = module.record_layout.len();
+                    module.record_layout.retain(|r| r.get_name() != req.name);
+                    deleted += before - module.record_layout.len();
+                }
+                "Function" => {
+                    before = module.function.len();
+                    module.function.retain(|f| f.get_name() != req.name);
+                    deleted += before - module.function.len();
+                }
+                "Group" => {
+                    before = module.group.len();
+                    module.group.retain(|g| g.get_name() != req.name);
+                    deleted += before - module.group.len();
+                }
+                "Unit" => {
+                    before = module.unit.len();
+                    module.unit.retain(|u| u.get_name() != req.name);
+                    deleted += before - module.unit.len();
+                }
+                "Frame" => {
+                    before = module.frame.len();
+                    module.frame.retain(|f| f.get_name() != req.name);
+                    deleted += before - module.frame.len();
+                }
+                "Blob" => {
+                    before = module.blob.len();
+                    module.blob.retain(|b| b.get_name() != req.name);
+                    deleted += before - module.blob.len();
+                }
+                "Instance" => {
+                    before = module.instance.len();
+                    module.instance.retain(|i| i.get_name() != req.name);
+                    deleted += before - module.instance.len();
+                }
+                "Transformer" => {
+                    before = module.transformer.len();
+                    module.transformer.retain(|t| t.get_name() != req.name);
+                    deleted += before - module.transformer.len();
+                }
+                "TypedefAxis" => {
+                    before = module.typedef_axis.len();
+                    module.typedef_axis.retain(|t| t.get_name() != req.name);
+                    deleted += before - module.typedef_axis.len();
+                }
+                "TypedefBlob" => {
+                    before = module.typedef_blob.len();
+                    module.typedef_blob.retain(|t| t.get_name() != req.name);
+                    deleted += before - module.typedef_blob.len();
+                }
+                "TypedefCharacteristic" => {
+                    before = module.typedef_characteristic.len();
+                    module.typedef_characteristic.retain(|t| t.get_name() != req.name);
+                    deleted += before - module.typedef_characteristic.len();
+                }
+                "TypedefMeasurement" => {
+                    before = module.typedef_measurement.len();
+                    module.typedef_measurement.retain(|t| t.get_name() != req.name);
+                    deleted += before - module.typedef_measurement.len();
+                }
+                "TypedefStructure" => {
+                    before = module.typedef_structure.len();
+                    module.typedef_structure.retain(|t| t.get_name() != req.name);
+                    deleted += before - module.typedef_structure.len();
+                }
+                _ => {}
+            }
+        }
+    }
+    deleted
+}
+
+#[tauri::command]
+fn delete_entities(
+    entities: Vec<DeleteEntityRequest>,
+    state: tauri::State<AppState>,
+) -> Result<A2lTree, String> {
+    let mut guard = state.a2l.lock().map_err(|_| "State lock poisoned")?;
+    let a2l = guard.as_mut().ok_or("No A2L loaded")?;
+    core_delete_entities(a2l, &entities);
+    Ok(build_tree(a2l))
+}
+
 #[tauri::command]
 fn update_module_long_identifier(
     name: String,
@@ -2601,6 +2734,7 @@ pub fn run() {
             list_a2l_tree,
             update_entity_name,
             update_module_long_identifier,
+            delete_entities,
             get_measurement,
             update_measurement,
             get_characteristic,

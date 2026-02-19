@@ -1,9 +1,9 @@
 use a2lfile::A2lObjectName;
 use opent_a2l_forge_lib::{
     core_check_conflicts, core_create_characteristics, core_create_measurements,
-    core_export_a2l, core_load_a2l_from_path, core_load_a2l_from_string,
-    core_load_elf_symbols, core_update_ecu_addresses, parse_dwarf_symbols,
-    SymbolWithMapping,
+    core_delete_entities, core_export_a2l, core_load_a2l_from_path,
+    core_load_a2l_from_string, core_load_elf_symbols, core_update_ecu_addresses,
+    parse_dwarf_symbols, DeleteEntityRequest, SymbolWithMapping,
 };
 
 fn fixtures_dir() -> String {
@@ -889,4 +889,87 @@ fn test_update_ecu_addresses_with_real_data() {
         "  First few matched: {:?}",
         &result.matched_names[..std::cmp::min(5, result.matched_names.len())]
     );
+}
+
+// ─── Delete entities tests ─────────────────────────────────────────────────
+
+#[test]
+fn test_delete_single_measurement() {
+    let (mut a2l, _) = core_load_a2l_from_path(&a2l_path("software_b.a2l")).unwrap();
+    let module = &a2l.project.module[0];
+    let initial_count = module.measurement.len();
+    assert!(initial_count > 0, "Should have measurements to delete");
+
+    let name = module.measurement[0].get_name().to_string();
+    let deleted = core_delete_entities(
+        &mut a2l,
+        &[DeleteEntityRequest {
+            kind: "Measurement".to_string(),
+            name: name.clone(),
+        }],
+    );
+
+    assert_eq!(deleted, 1, "Should have deleted exactly one measurement");
+    assert_eq!(
+        a2l.project.module[0].measurement.len(),
+        initial_count - 1,
+        "Measurement count should decrease by 1"
+    );
+    assert!(
+        !a2l.project.module[0]
+            .measurement
+            .iter()
+            .any(|m| m.get_name() == name),
+        "Deleted measurement should no longer exist"
+    );
+}
+
+#[test]
+fn test_delete_multiple_entities() {
+    let (mut a2l, _) = core_load_a2l_from_path(&a2l_path("software_b.a2l")).unwrap();
+    let module = &a2l.project.module[0];
+    let initial_meas = module.measurement.len();
+    assert!(initial_meas >= 3, "Need at least 3 measurements");
+
+    let meas_name1 = module.measurement[0].get_name().to_string();
+    let meas_name2 = module.measurement[1].get_name().to_string();
+    let meas_name3 = module.measurement[2].get_name().to_string();
+
+    let deleted = core_delete_entities(
+        &mut a2l,
+        &[
+            DeleteEntityRequest {
+                kind: "Measurement".to_string(),
+                name: meas_name1,
+            },
+            DeleteEntityRequest {
+                kind: "Measurement".to_string(),
+                name: meas_name2,
+            },
+            DeleteEntityRequest {
+                kind: "Measurement".to_string(),
+                name: meas_name3,
+            },
+        ],
+    );
+
+    assert_eq!(deleted, 3, "Should have deleted 3 entities");
+    assert_eq!(a2l.project.module[0].measurement.len(), initial_meas - 3);
+}
+
+#[test]
+fn test_delete_nonexistent_entity() {
+    let (mut a2l, _) = core_load_a2l_from_path(&a2l_path("software_b.a2l")).unwrap();
+    let initial_count = a2l.project.module[0].measurement.len();
+
+    let deleted = core_delete_entities(
+        &mut a2l,
+        &[DeleteEntityRequest {
+            kind: "Measurement".to_string(),
+            name: "NONEXISTENT_ENTITY_NAME_12345".to_string(),
+        }],
+    );
+
+    assert_eq!(deleted, 0, "Should not delete anything for nonexistent name");
+    assert_eq!(a2l.project.module[0].measurement.len(), initial_count);
 }
