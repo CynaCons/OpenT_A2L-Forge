@@ -2240,8 +2240,7 @@ pub fn parse_dwarf_symbols(buffer: &[u8]) -> HashMap<String, DwarfSymbolInfo> {
                             let member_offset = get_member_location(entry);
                             let member_type_off = resolve_type_to_offset(&unit, entry);
                             let member_type = member_type_off
-                                .and_then(|off| type_map.get(&off))
-                                .cloned()
+                                .and_then(|off| resolve_type_name_through_chain(off, &type_map, &type_indirection))
                                 .unwrap_or_else(|| "unknown".to_string());
                             // Resolve member size by chasing through type indirection
                             let member_size = member_type_off
@@ -2322,7 +2321,7 @@ pub fn parse_dwarf_symbols(buffer: &[u8]) -> HashMap<String, DwarfSymbolInfo> {
                             let struct_off = resolve_struct_through_chain(
                                 direct_off, &type_indirection, &struct_members
                             );
-                            let type_name = type_map.get(&direct_off).cloned()
+                            let type_name = resolve_type_name_through_chain(direct_off, &type_map, &type_indirection)
                                 .unwrap_or_else(|| "unknown".to_string());
 
                             // Resolve enum variants for this variable
@@ -2332,8 +2331,8 @@ pub fn parse_dwarf_symbols(buffer: &[u8]) -> HashMap<String, DwarfSymbolInfo> {
 
                             if let Some(soff) = struct_off {
                                 if let Some(members) = struct_members.get(&soff) {
-                                    let base_type = type_map.get(&soff).cloned()
-                                        .or_else(|| type_map.get(&direct_off).cloned())
+                                    let base_type = resolve_type_name_through_chain(soff, &type_map, &type_indirection)
+                                        .or_else(|| resolve_type_name_through_chain(direct_off, &type_map, &type_indirection))
                                         .unwrap_or_default();
                                     result.insert(var_name.clone(), DwarfSymbolInfo {
                                         type_name: base_type,
@@ -2408,6 +2407,25 @@ fn resolve_enum_through_chain(
         }
     }
     Vec::new()
+}
+
+/// Resolve type name through typedef/qualifier chain (e.g. volatile, const).
+fn resolve_type_name_through_chain(
+    start: gimli::DebugInfoOffset,
+    type_map: &HashMap<gimli::DebugInfoOffset, String>,
+    type_indirection: &HashMap<gimli::DebugInfoOffset, gimli::DebugInfoOffset>,
+) -> Option<String> {
+    let mut current = start;
+    for _ in 0..16 {
+        if let Some(name) = type_map.get(&current) {
+            return Some(name.clone());
+        }
+        match type_indirection.get(&current) {
+            Some(&next) => current = next,
+            None => return None,
+        }
+    }
+    None
 }
 
 /// Resolve byte size through typedef/qualifier chain.

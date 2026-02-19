@@ -973,3 +973,63 @@ fn test_delete_nonexistent_entity() {
     assert_eq!(deleted, 0, "Should not delete anything for nonexistent name");
     assert_eq!(a2l.project.module[0].measurement.len(), initial_count);
 }
+
+// ─── Volatile type resolution tests ────────────────────────────────────────
+
+#[test]
+fn test_volatile_types_resolve_through_chain() {
+    // software_b.elf has 1165 volatile type entries
+    let buffer = std::fs::read(format!("{}/bin/software_b.elf", fixtures_dir())).unwrap();
+    let dwarf_info = parse_dwarf_symbols(&buffer);
+
+    // Count how many variables have "unknown" type
+    let unknown_count = dwarf_info
+        .values()
+        .filter(|info| info.type_name == "unknown")
+        .count();
+    let total = dwarf_info.len();
+
+    println!(
+        "DWARF volatile test: {total} variables, {unknown_count} unknown types ({:.1}%)",
+        if total > 0 {
+            (unknown_count as f64 / total as f64) * 100.0
+        } else {
+            0.0
+        }
+    );
+
+    // With volatile chasing, the vast majority of types should resolve.
+    // A small percentage of unknowns is acceptable (some variables may genuinely
+    // have no type attribute), but more than 10% would indicate broken chaining.
+    let unknown_pct = if total > 0 {
+        (unknown_count as f64 / total as f64) * 100.0
+    } else {
+        0.0
+    };
+    assert!(
+        unknown_pct < 10.0,
+        "Too many unknown types ({unknown_count}/{total} = {unknown_pct:.1}%). \
+         Volatile/const qualifier chaining may be broken."
+    );
+
+    // Also check that struct member types resolve through volatile qualifiers
+    let members_unknown: usize = dwarf_info
+        .values()
+        .flat_map(|info| info.members.iter())
+        .filter(|m| m.type_name == "unknown")
+        .count();
+    let members_total: usize = dwarf_info
+        .values()
+        .map(|info| info.members.len())
+        .sum();
+    println!(
+        "  Members: {members_total} total, {members_unknown} unknown types"
+    );
+    if members_total > 0 {
+        let members_unknown_pct = (members_unknown as f64 / members_total as f64) * 100.0;
+        assert!(
+            members_unknown_pct < 10.0,
+            "Too many unknown member types ({members_unknown}/{members_total} = {members_unknown_pct:.1}%)"
+        );
+    }
+}
