@@ -1000,40 +1000,41 @@ pub fn core_load_elf_symbols_from_buffer(buffer: &[u8]) -> Result<Vec<ElfSymbol>
 
                 // Check if DWARF info reveals this is an array variable
                 let dwarf_array = dwarf_info.get(name).and_then(|info| {
-                    if info.array_dim > 0 {
-                        Some((info.array_dim, info.element_type_name.clone(), info.element_size))
+                    if !info.array_dims.is_empty() {
+                        Some((info.array_dims.clone(), info.element_type_name.clone(), info.element_size))
                     } else {
                         None
                     }
                 });
 
-                let (suggested_type, min_limit, max_limit, var_array_dim, dwarf_type) =
-                    if let Some((arr_dim, elem_type, elem_size)) = dwarf_array {
+                let (suggested_type, min_limit, max_limit, var_array_dims, dwarf_type) =
+                    if let Some((arr_dims, elem_type, elem_size)) = dwarf_array {
                         // Array variable: infer type from element type/size
                         let etype = elem_type.as_deref().unwrap_or("");
                         let (a2l_type, mn, mx) = infer_a2l_type_from_member(etype, elem_size);
-                        let display = format!("{}[{}]", elem_type.as_deref().unwrap_or("unknown"), arr_dim);
-                        (a2l_type, mn, mx, arr_dim, Some(display))
+                        let dims_str = format_dims(&arr_dims);
+                        let display = format!("{}{}", elem_type.as_deref().unwrap_or("unknown"), dims_str);
+                        (a2l_type, mn, mx, arr_dims, Some(display))
                     } else if let Some(dinfo) = dwarf_info.get(name) {
                         // DWARF type name is known but no explicit array info;
                         // use the type name for better inference, and check if
                         // the total size suggests an array
                         let elem_size = infer_element_size(&dinfo.type_name);
                         let (a2l_type, mn, mx) = infer_a2l_type_from_member(&dinfo.type_name, elem_size);
-                        let arr_dim = if elem_size > 0 && sym.st_size > elem_size && sym.st_size % elem_size == 0 {
-                            sym.st_size / elem_size
+                        let arr_dims = if elem_size > 0 && sym.st_size > elem_size && sym.st_size % elem_size == 0 {
+                            vec![sym.st_size / elem_size]
                         } else {
-                            0
+                            Vec::new()
                         };
-                        let display = if arr_dim > 0 {
-                            format!("{}[{}]", dinfo.type_name, arr_dim)
+                        let display = if !arr_dims.is_empty() {
+                            format!("{}{}", dinfo.type_name, format_dims(&arr_dims))
                         } else {
                             dinfo.type_name.clone()
                         };
-                        (a2l_type, mn, mx, arr_dim, Some(display))
+                        (a2l_type, mn, mx, arr_dims, Some(display))
                     } else {
                         let (a2l_type, mn, mx) = infer_a2l_type(name, sym.st_size);
-                        (a2l_type, mn, mx, 0u64, None)
+                        (a2l_type, mn, mx, Vec::new(), None)
                     };
 
                 symbols.push(ElfSymbol {
@@ -1049,7 +1050,7 @@ pub fn core_load_elf_symbols_from_buffer(buffer: &[u8]) -> Result<Vec<ElfSymbol>
                     dwarf_type,
                     is_struct_member: false,
                     parent_struct: None,
-                    array_dim: var_array_dim,
+                    array_dims: var_array_dims,
                     enum_values: var_enum_vals,
                 });
 
@@ -1060,7 +1061,7 @@ pub fn core_load_elf_symbols_from_buffer(buffer: &[u8]) -> Result<Vec<ElfSymbol>
                             let member_addr = sym.st_value + member.offset;
 
                             // For arrays: use element type/size for A2L type inference
-                            let (infer_type, infer_size) = if member.array_dim > 0 {
+                            let (infer_type, infer_size) = if !member.array_dims.is_empty() {
                                 let etype = member.element_type_name.as_deref().unwrap_or(&member.type_name);
                                 (etype, member.element_size)
                             } else {
@@ -1069,10 +1070,10 @@ pub fn core_load_elf_symbols_from_buffer(buffer: &[u8]) -> Result<Vec<ElfSymbol>
                             let (member_a2l_type, member_min, member_max) = infer_a2l_type_from_member(infer_type, infer_size);
                             let member_addr_warning = validate_address(member_addr);
 
-                            // Display type: for arrays, show "element_type[N]"
-                            let display_type = if member.array_dim > 0 {
+                            // Display type: for arrays/matrices, show "element_type[N][M]..."
+                            let display_type = if !member.array_dims.is_empty() {
                                 let elem = member.element_type_name.as_deref().unwrap_or("unknown");
-                                format!("{}[{}]", elem, member.array_dim)
+                                format!("{}{}", elem, format_dims(&member.array_dims))
                             } else {
                                 member.type_name.clone()
                             };
@@ -1090,7 +1091,7 @@ pub fn core_load_elf_symbols_from_buffer(buffer: &[u8]) -> Result<Vec<ElfSymbol>
                                 dwarf_type: Some(display_type),
                                 is_struct_member: true,
                                 parent_struct: Some(name.to_string()),
-                                array_dim: member.array_dim,
+                                array_dims: member.array_dims.clone(),
                                 enum_values: member.enum_variants.clone(),
                             });
                         }
@@ -1128,9 +1129,9 @@ pub fn core_create_measurements(
             sym.upper_limit,
         );
         m.ecu_address = Some(a2lfile::EcuAddress::new(sym.address as u32));
-        if sym.array_dim > 0 {
+        if !sym.array_dims.is_empty() {
             let mut md = a2lfile::MatrixDim::new();
-            md.dim_list = vec![sym.array_dim as u16];
+            md.dim_list = sym.array_dims.iter().map(|&d| d as u16).collect();
             m.matrix_dim = Some(md);
         }
         target_module.measurement.retain(|existing| existing.get_name() != sym.name);
@@ -1174,7 +1175,7 @@ pub fn core_create_characteristics(
     for sym in symbols {
         ensure_record_layout(target_module, &sym.a2l_type);
         let deposit = record_layout_name_for_type(&sym.a2l_type);
-        let char_type = if sym.array_dim > 0 {
+        let char_type = if !sym.array_dims.is_empty() {
             a2lfile::CharacteristicType::ValBlk
         } else {
             a2lfile::CharacteristicType::Value
@@ -1229,9 +1230,9 @@ pub fn core_create_characteristics(
             sym.lower_limit,
             sym.upper_limit,
         );
-        if sym.array_dim > 0 {
+        if !sym.array_dims.is_empty() {
             let mut md = a2lfile::MatrixDim::new();
-            md.dim_list = vec![sym.array_dim as u16];
+            md.dim_list = sym.array_dims.iter().map(|&d| d as u16).collect();
             c.matrix_dim = Some(md);
         }
         target_module.characteristic.retain(|existing| existing.get_name() != sym.name);
@@ -1306,9 +1307,9 @@ pub fn core_update_ecu_addresses(
         if let Some(sym) = sym_map.get(meas_name.as_str()) {
             measurement.ecu_address = Some(a2lfile::EcuAddress::new(sym.address as u32));
             // Update MATRIX_DIM if array size changed
-            if sym.array_dim > 0 {
+            if !sym.array_dims.is_empty() {
                 let mut md = a2lfile::MatrixDim::new();
-                md.dim_list = vec![sym.array_dim as u16];
+                md.dim_list = sym.array_dims.iter().map(|&d| d as u16).collect();
                 measurement.matrix_dim = Some(md);
             }
             updated_count += 1;
@@ -1322,10 +1323,10 @@ pub fn core_update_ecu_addresses(
         if let Some(sym) = sym_map.get(char_name.as_str()) {
             characteristic.address = sym.address as u32;
             // Update array dims
-            if sym.array_dim > 0 {
+            if !sym.array_dims.is_empty() {
                 characteristic.characteristic_type = a2lfile::CharacteristicType::ValBlk;
                 let mut md = a2lfile::MatrixDim::new();
-                md.dim_list = vec![sym.array_dim as u16];
+                md.dim_list = sym.array_dims.iter().map(|&d| d as u16).collect();
                 characteristic.matrix_dim = Some(md);
             }
             updated_count += 1;
@@ -1944,11 +1945,17 @@ pub struct ElfSymbol {
     pub dwarf_type: Option<String>,
     pub is_struct_member: bool,
     pub parent_struct: Option<String>,
-    /// For array members: number of elements. 0 means not an array.
-    pub array_dim: u64,
+    /// For array/matrix: dimensions list. Empty means not an array.
+    #[serde(default)]
+    pub array_dims: Vec<u64>,
     /// For enum types: list of (enumerator_name, value) pairs.
     #[serde(default)]
     pub enum_values: Vec<(String, i64)>,
+}
+
+// Format array dimensions as "[N][M]..." for display
+fn format_dims(dims: &[u64]) -> String {
+    dims.iter().map(|d| format!("[{}]", d)).collect::<String>()
 }
 
 // Type inference based on symbol size and name heuristics
@@ -2083,8 +2090,8 @@ pub struct DwarfSymbolInfo {
     pub members: Vec<DwarfMemberInfo>,
     /// If this variable's type resolves to an enum, the (name, value) pairs
     pub enum_variants: Vec<(String, i64)>,
-    /// If the variable is an array, the number of elements. 0 = not an array.
-    pub array_dim: u64,
+    /// If the variable is an array/matrix, the dimensions. Empty = not an array.
+    pub array_dims: Vec<u64>,
     /// For arrays: the element type name (e.g. "float")
     pub element_type_name: Option<String>,
     /// For arrays: the element byte size
@@ -2097,8 +2104,8 @@ pub struct DwarfMemberInfo {
     pub offset: u64,
     pub size: u64,
     pub type_name: String,
-    /// If this member is an array, number of elements. 0 = not an array.
-    pub array_dim: u64,
+    /// If this member is an array/matrix, the dimensions. Empty = not an array.
+    pub array_dims: Vec<u64>,
     /// For arrays: the element type name (e.g. "uint16_t")
     pub element_type_name: Option<String>,
     /// For arrays: the element byte size
@@ -2159,8 +2166,8 @@ pub fn parse_dwarf_symbols(buffer: &[u8]) -> HashMap<String, DwarfSymbolInfo> {
     let mut type_indirection: HashMap<gimli::DebugInfoOffset, gimli::DebugInfoOffset> = HashMap::new();
     // Build a struct type offset -> members map
     let mut struct_members: HashMap<gimli::DebugInfoOffset, Vec<DwarfMemberInfo>> = HashMap::new();
-    // Array info: array type offset -> (element_type_offset, element_count)
-    let mut array_info: HashMap<gimli::DebugInfoOffset, (Option<gimli::DebugInfoOffset>, Option<u64>)> = HashMap::new();
+    // Array info: array type offset -> (element_type_offset, dimension_list)
+    let mut array_info: HashMap<gimli::DebugInfoOffset, (Option<gimli::DebugInfoOffset>, Vec<u64>)> = HashMap::new();
     // Enum values: enum type offset -> Vec<(enumerator_name, const_value)>
     let mut enum_values: HashMap<gimli::DebugInfoOffset, Vec<(String, i64)>> = HashMap::new();
     let mut current_enum_offset: Option<gimli::DebugInfoOffset> = None;
@@ -2243,18 +2250,19 @@ pub fn parse_dwarf_symbols(buffer: &[u8]) -> HashMap<String, DwarfSymbolInfo> {
                         type_size_map.insert(offset, size);
                     }
                     let elem_type_off = resolve_type_to_offset(&unit, entry);
-                    array_info.insert(offset, (elem_type_off, None));
+                    array_info.insert(offset, (elem_type_off, Vec::new()));
                     current_array_offset = Some(offset);
                 }
                 gimli::DW_TAG_subrange_type => {
-                    // Child of DW_TAG_array_type — extract element count
+                    // Child of DW_TAG_array_type — extract dimension count
                     // DW_AT_upper_bound = count - 1, or DW_AT_count = count
+                    // Multiple subrange children represent multiple dimensions (matrix)
                     if let Some(arr_off) = current_array_offset {
                         let count = get_attr_udata(entry, gimli::DW_AT_count)
                             .or_else(|| get_attr_udata(entry, gimli::DW_AT_upper_bound).and_then(|ub| ub.checked_add(1)));
                         if let Some(count) = count {
                             if let Some(info) = array_info.get_mut(&arr_off) {
-                                info.1 = Some(count);
+                                info.1.push(count);
                             }
                         }
                     }
@@ -2329,9 +2337,8 @@ pub fn parse_dwarf_symbols(buffer: &[u8]) -> HashMap<String, DwarfSymbolInfo> {
                                 None
                             });
 
-                            let (arr_dim, elem_type_name, elem_size) = if let Some(arr_off) = resolved_type_off {
-                                if let Some((elem_off, count)) = array_info.get(&arr_off) {
-                                    let dim = count.unwrap_or(0);
+                            let (arr_dims, elem_type_name, elem_size) = if let Some(arr_off) = resolved_type_off {
+                                if let Some((elem_off, dims)) = array_info.get(&arr_off) {
                                     let elem_name = elem_off
                                         .and_then(|eoff| {
                                             // Chase through typedef chain for the element type name
@@ -2350,12 +2357,12 @@ pub fn parse_dwarf_symbols(buffer: &[u8]) -> HashMap<String, DwarfSymbolInfo> {
                                     let esize = elem_off
                                         .and_then(|eoff| resolve_size_through_chain(eoff, &type_size_map, &type_indirection))
                                         .unwrap_or(0);
-                                    (dim, elem_name, esize)
+                                    (dims.clone(), elem_name, esize)
                                 } else {
-                                    (0, None, 0)
+                                    (Vec::new(), None, 0)
                                 }
                             } else {
-                                (0, None, 0)
+                                (Vec::new(), None, 0)
                             };
 
                             // Check if the member type resolves to an enum
@@ -2371,7 +2378,7 @@ pub fn parse_dwarf_symbols(buffer: &[u8]) -> HashMap<String, DwarfSymbolInfo> {
                                     offset: member_offset,
                                     size: member_size,
                                     type_name: member_type,
-                                    array_dim: arr_dim,
+                                    array_dims: arr_dims,
                                     element_type_name: elem_type_name,
                                     element_size: elem_size,
                                     enum_variants: member_enum_vals,
@@ -2411,20 +2418,19 @@ pub fn parse_dwarf_symbols(buffer: &[u8]) -> HashMap<String, DwarfSymbolInfo> {
                                 }
                                 found
                             };
-                            let (var_arr_dim, var_elem_type, var_elem_size) = if let Some(arr_off) = resolved_arr_off {
-                                if let Some((elem_off, count)) = array_info.get(&arr_off) {
-                                    let dim = count.unwrap_or(0);
+                            let (var_arr_dims, var_elem_type, var_elem_size) = if let Some(arr_off) = resolved_arr_off {
+                                if let Some((elem_off, dims)) = array_info.get(&arr_off) {
                                     let elem_name = elem_off
                                         .and_then(|eoff| resolve_type_name_through_chain(eoff, &type_map, &type_indirection));
                                     let esize = elem_off
                                         .and_then(|eoff| resolve_size_through_chain(eoff, &type_size_map, &type_indirection))
                                         .unwrap_or(0);
-                                    (dim, elem_name, esize)
+                                    (dims.clone(), elem_name, esize)
                                 } else {
-                                    (0, None, 0)
+                                    (Vec::new(), None, 0)
                                 }
                             } else {
-                                (0, None, 0)
+                                (Vec::new(), None, 0)
                             };
 
                             if let Some(soff) = struct_off {
@@ -2436,7 +2442,7 @@ pub fn parse_dwarf_symbols(buffer: &[u8]) -> HashMap<String, DwarfSymbolInfo> {
                                         type_name: base_type,
                                         members: members.clone(),
                                         enum_variants: var_enum_vals.clone(),
-                                        array_dim: var_arr_dim,
+                                        array_dims: var_arr_dims.clone(),
                                         element_type_name: var_elem_type.clone(),
                                         element_size: var_elem_size,
                                     });
@@ -2447,7 +2453,7 @@ pub fn parse_dwarf_symbols(buffer: &[u8]) -> HashMap<String, DwarfSymbolInfo> {
                                 type_name,
                                 members: Vec::new(),
                                 enum_variants: var_enum_vals,
-                                array_dim: var_arr_dim,
+                                array_dims: var_arr_dims,
                                 element_type_name: var_elem_type,
                                 element_size: var_elem_size,
                             });
@@ -2456,7 +2462,7 @@ pub fn parse_dwarf_symbols(buffer: &[u8]) -> HashMap<String, DwarfSymbolInfo> {
                                 type_name: "unknown".to_string(),
                                 members: Vec::new(),
                                 enum_variants: Vec::new(),
-                                array_dim: 0,
+                                array_dims: Vec::new(),
                                 element_type_name: None,
                                 element_size: 0,
                             });
@@ -2732,7 +2738,7 @@ pub struct SymbolWithMapping {
     pub resolution: Option<u16>,
     pub accuracy: Option<f64>,
     #[serde(default)]
-    pub array_dim: u64,
+    pub array_dims: Vec<u64>,
     #[serde(default)]
     pub enum_values: Vec<(String, i64)>,
 }
@@ -2772,7 +2778,7 @@ fn create_measurements_from_elf(
             conversion: Some("NO_COMPU_METHOD".to_string()),
             resolution: Some(1),
             accuracy: Some(0.0),
-            array_dim: s.array_dim,
+            array_dims: s.array_dims.clone(),
             enum_values: s.enum_values.clone(),
         }
     }).collect();

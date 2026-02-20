@@ -132,7 +132,7 @@ fn test_create_measurements_from_real_elf() {
             conversion: None,
             resolution: None,
             accuracy: None,
-            array_dim: s.array_dim,
+            array_dims: s.array_dims.clone(),
             enum_values: s.enum_values.clone(),
         })
         .collect();
@@ -184,7 +184,7 @@ fn test_replace_duplicate_measurement() {
         conversion: None,
         resolution: None,
         accuracy: None,
-        array_dim: 0,
+        array_dims: vec![],
         enum_values: vec![],
     };
 
@@ -241,7 +241,7 @@ fn test_check_conflicts_with_real_data() {
             conversion: None,
             resolution: None,
             accuracy: None,
-            array_dim: 0,
+            array_dims: vec![],
             enum_values: vec![],
         })
         .collect();
@@ -282,7 +282,7 @@ fn test_export_contains_imported_measurements() {
             conversion: None,
             resolution: None,
             accuracy: None,
-            array_dim: 0,
+            array_dims: vec![],
             enum_values: vec![],
         },
         SymbolWithMapping {
@@ -294,7 +294,7 @@ fn test_export_contains_imported_measurements() {
             conversion: None,
             resolution: None,
             accuracy: None,
-            array_dim: 0,
+            array_dims: vec![],
             enum_values: vec![],
         },
     ];
@@ -466,7 +466,7 @@ fn test_voyant_struct_members_as_a2l_measurements() {
             conversion: None,
             resolution: None,
             accuracy: None,
-            array_dim: s.array_dim,
+            array_dims: s.array_dims.clone(),
             enum_values: s.enum_values.clone(),
         })
         .collect();
@@ -558,7 +558,7 @@ fn test_voyant_dwarf_parsing_directly() {
             info.members.len()
         );
         for member in &info.members {
-            println!("    .{} offset={} size={} type={} array_dim={}", member.name, member.offset, member.size, member.type_name, member.array_dim);
+            println!("    .{} offset={} size={} type={} array_dims={:?}", member.name, member.offset, member.size, member.type_name, member.array_dims);
         }
     }
 
@@ -608,13 +608,13 @@ fn test_array_members_get_matrix_dim() {
     assert!(samples.is_some(), "g_cs.samples should exist in ELF symbols");
     let samples = samples.unwrap();
     assert!(
-        samples.array_dim > 0,
-        "g_cs.samples should have array_dim > 0, got {}",
-        samples.array_dim
+        !samples.array_dims.is_empty(),
+        "g_cs.samples should have array_dims, got {:?}",
+        samples.array_dims
     );
     println!(
-        "g_cs.samples: array_dim={}, type={}, a2l_type={}",
-        samples.array_dim, samples.dwarf_type.as_deref().unwrap_or("none"), samples.suggested_a2l_type
+        "g_cs.samples: array_dims={:?}, type={}, a2l_type={}",
+        samples.array_dims, samples.dwarf_type.as_deref().unwrap_or("none"), samples.suggested_a2l_type
     );
 
     // Create A2L and import
@@ -634,7 +634,7 @@ fn test_array_members_get_matrix_dim() {
         conversion: None,
         resolution: None,
         accuracy: None,
-        array_dim: samples.array_dim,
+        array_dims: samples.array_dims.clone(),
         enum_values: vec![],
     };
 
@@ -651,13 +651,14 @@ fn test_array_members_get_matrix_dim() {
     let md = meas.matrix_dim.as_ref().unwrap();
     assert_eq!(
         md.dim_list.len(),
-        1,
-        "matrix_dim should have 1 dimension"
+        samples.array_dims.len(),
+        "matrix_dim dimensions count should match array_dims"
     );
+    let expected_dims: Vec<u16> = samples.array_dims.iter().map(|&d| d as u16).collect();
     assert_eq!(
-        md.dim_list[0] as u64,
-        samples.array_dim,
-        "matrix_dim dimension should match array_dim"
+        md.dim_list,
+        expected_dims,
+        "matrix_dim dimensions should match array_dims"
     );
     println!(
         "g_cs.samples MATRIX_DIM = {:?}",
@@ -671,7 +672,7 @@ fn test_array_members_get_matrix_dim() {
         "Export should contain MATRIX_DIM for array member"
     );
     assert!(
-        exported.contains(&format!("{}", samples.array_dim)),
+        exported.contains(&format!("{}", samples.array_dims[0])),
         "Export should contain the array dimension value"
     );
     println!("Array MATRIX_DIM test passed!");
@@ -699,7 +700,7 @@ fn test_create_characteristics_from_elf_symbols() {
             conversion: None,
             resolution: None,
             accuracy: None,
-            array_dim: 0,
+            array_dims: vec![],
             enum_values: vec![],
         },
         SymbolWithMapping {
@@ -711,7 +712,7 @@ fn test_create_characteristics_from_elf_symbols() {
             conversion: None,
             resolution: None,
             accuracy: None,
-            array_dim: 200,
+            array_dims: vec![200],
             enum_values: vec![],
         },
         SymbolWithMapping {
@@ -723,7 +724,7 @@ fn test_create_characteristics_from_elf_symbols() {
             conversion: None,
             resolution: None,
             accuracy: None,
-            array_dim: 0,
+            array_dims: vec![],
             enum_values: vec![],
         },
     ];
@@ -787,7 +788,7 @@ fn test_create_characteristics_replaces_existing() {
         conversion: None,
         resolution: None,
         accuracy: None,
-        array_dim: 0,
+        array_dims: vec![],
         enum_values: vec![],
     };
 
@@ -827,7 +828,7 @@ fn test_enum_compu_method_creation() {
         conversion: None,
         resolution: None,
         accuracy: None,
-        array_dim: 0,
+        array_dims: vec![],
         enum_values: vec![
             ("STATE_IDLE".to_string(), 0),
             ("STATE_RUNNING".to_string(), 1),
@@ -1045,20 +1046,20 @@ fn test_volatile_array_symbols_get_correct_type_and_dim() {
     println!("ELF symbols with DWARF type: {}", with_dwarf.len());
     for sym in with_dwarf.iter().take(20) {
         println!(
-            "  {} size={} a2l_type={} array_dim={} dwarf_type={:?}",
-            sym.name, sym.size, sym.suggested_a2l_type, sym.array_dim, sym.dwarf_type
+            "  {} size={} a2l_type={} array_dims={:?} dwarf_type={:?}",
+            sym.name, sym.size, sym.suggested_a2l_type, sym.array_dims, sym.dwarf_type
         );
     }
 
     // Check symbols with array dimensions
     let arrays: Vec<_> = with_dwarf.iter()
-        .filter(|s| s.array_dim > 0)
+        .filter(|s| !s.array_dims.is_empty())
         .collect();
     println!("\nArray symbols: {}", arrays.len());
     for sym in &arrays {
         println!(
-            "  {} size={} a2l_type={} array_dim={} dwarf_type={:?}",
-            sym.name, sym.size, sym.suggested_a2l_type, sym.array_dim, sym.dwarf_type
+            "  {} size={} a2l_type={} array_dims={:?} dwarf_type={:?}",
+            sym.name, sym.size, sym.suggested_a2l_type, sym.array_dims, sym.dwarf_type
         );
     }
 
@@ -1066,20 +1067,32 @@ fn test_volatile_array_symbols_get_correct_type_and_dim() {
     // float Characteristic_ValBlk[5] should be a float array
     let valblk = with_dwarf.iter().find(|s| s.name == "Characteristic_ValBlk")
         .expect("Characteristic_ValBlk should exist");
-    assert!(valblk.array_dim > 0, "Characteristic_ValBlk should be an array");
+    assert!(!valblk.array_dims.is_empty(), "Characteristic_ValBlk should be an array");
     assert_eq!(valblk.suggested_a2l_type, "FLOAT32_IEEE",
         "Characteristic_ValBlk should be FLOAT32_IEEE, got {}", valblk.suggested_a2l_type);
-    assert_eq!(valblk.array_dim, 5,
-        "Characteristic_ValBlk should have array_dim=5, got {}", valblk.array_dim);
-    println!("\nCharacteristic_ValBlk: a2l_type={} array_dim={} dwarf_type={:?}",
-        valblk.suggested_a2l_type, valblk.array_dim, valblk.dwarf_type);
+    assert_eq!(valblk.array_dims, vec![5],
+        "Characteristic_ValBlk should have array_dims=[5], got {:?}", valblk.array_dims);
+    println!("\nCharacteristic_ValBlk: a2l_type={} array_dims={:?} dwarf_type={:?}",
+        valblk.suggested_a2l_type, valblk.array_dims, valblk.dwarf_type);
 
     // uint8_t Blob_2[256] should be a uint8 array
     let blob = with_dwarf.iter().find(|s| s.name == "Blob_2")
         .expect("Blob_2 should exist");
-    assert!(blob.array_dim > 0, "Blob_2 should be an array");
+    assert!(!blob.array_dims.is_empty(), "Blob_2 should be an array");
     assert_eq!(blob.suggested_a2l_type, "UBYTE",
         "Blob_2 element should be UBYTE, got {}", blob.suggested_a2l_type);
-    assert_eq!(blob.array_dim, 256,
-        "Blob_2 should have array_dim=256, got {}", blob.array_dim);
+    assert_eq!(blob.array_dims, vec![256],
+        "Blob_2 should have array_dims=[256], got {:?}", blob.array_dims);
+
+    // uint8_t Measurement_Matrix[5][4] should be a 2D matrix
+    let matrix = with_dwarf.iter().find(|s| s.name == "Measurement_Matrix")
+        .expect("Measurement_Matrix should exist");
+    assert_eq!(matrix.array_dims.len(), 2,
+        "Measurement_Matrix should have 2 dimensions, got {:?}", matrix.array_dims);
+    assert_eq!(matrix.array_dims, vec![5, 4],
+        "Measurement_Matrix should have array_dims=[5, 4], got {:?}", matrix.array_dims);
+    assert_eq!(matrix.suggested_a2l_type, "UBYTE",
+        "Measurement_Matrix element should be UBYTE, got {}", matrix.suggested_a2l_type);
+    println!("\nMeasurement_Matrix: a2l_type={} array_dims={:?} dwarf_type={:?}",
+        matrix.suggested_a2l_type, matrix.array_dims, matrix.dwarf_type);
 }

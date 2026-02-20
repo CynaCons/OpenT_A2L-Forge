@@ -145,7 +145,7 @@ type ElfSymbol = {
   dwarf_type: string | null;
   is_struct_member: boolean;
   parent_struct: string | null;
-  array_dim: number;
+  array_dims: number[];
   enum_values: [string, number][];
 };
 
@@ -158,7 +158,7 @@ type SymbolWithMapping = {
   conversion?: string;
   resolution?: number;
   accuracy?: number;
-  array_dim?: number;
+  array_dims?: number[];
   enum_values?: [string, number][];
 };
 
@@ -863,7 +863,7 @@ function App() {
           conversion: "NO_COMPU_METHOD",
           resolution: 1,
           accuracy: 0,
-          array_dim: s.array_dim || 0,
+          array_dims: s.array_dims || [],
           enum_values: s.enum_values || [],
       }));
 
