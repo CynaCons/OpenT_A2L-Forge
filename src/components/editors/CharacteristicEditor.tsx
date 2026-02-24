@@ -9,6 +9,7 @@ import {
   Typography,
   Grid,
   Alert,
+  Divider,
 } from "@mui/material";
 
 type CharacteristicData = {
@@ -40,6 +41,28 @@ const CHARACTERISTIC_TYPES = [
   "VAL_BLK",
   "VALUE",
 ];
+
+const ACCENT = "#ce9178";
+
+function SectionHeader({ title }: { title: string }) {
+  return (
+    <Typography
+      variant="overline"
+      sx={{
+        display: "block",
+        color: "#888",
+        letterSpacing: 1.5,
+        fontSize: 10,
+        borderLeft: `2px solid ${ACCENT}`,
+        pl: 1.5,
+        mb: 0.5,
+        mt: 1,
+      }}
+    >
+      {title}
+    </Typography>
+  );
+}
 
 export function CharacteristicEditor({
   initialName,
@@ -85,9 +108,11 @@ export function CharacteristicEditor({
   if (!data) return <Alert severity="warning">No data available</Alert>;
 
   return (
-    <Box data-testid="editor-characteristic" sx={{ display: "flex", flexDirection: "column", gap: 3, pt: 1 }}>
+    <Box data-testid="editor-characteristic" sx={{ display: "flex", flexDirection: "column", gap: 2.5, pt: 1 }}>
       {error && <Alert severity="error">{error}</Alert>}
 
+      {/* Identity */}
+      <SectionHeader title="Identity" />
       <Grid container spacing={2}>
         <Grid size={{ xs: 12, sm: 8 }}>
           <TextField
@@ -116,7 +141,11 @@ export function CharacteristicEditor({
             ))}
           </TextField>
         </Grid>
+      </Grid>
 
+      {/* Description */}
+      <SectionHeader title="Description" />
+      <Grid container spacing={2}>
         <Grid size={{ xs: 12 }}>
           <TextField
             label="Long Identifier"
@@ -128,7 +157,11 @@ export function CharacteristicEditor({
             rows={2}
           />
         </Grid>
+      </Grid>
 
+      {/* Address */}
+      <SectionHeader title="Address" />
+      <Grid container spacing={2}>
         <Grid size={{ xs: 12, sm: 6 }}>
           <TextField
             label="Address (Hex)"
@@ -148,7 +181,11 @@ export function CharacteristicEditor({
             fullWidth
           />
         </Grid>
+      </Grid>
 
+      {/* Range */}
+      <SectionHeader title="Range" />
+      <Grid container spacing={2}>
         <Grid size={{ xs: 12, sm: 6 }}>
           <TextField
             label="Lower Limit"
@@ -169,7 +206,11 @@ export function CharacteristicEditor({
             fullWidth
           />
         </Grid>
+      </Grid>
 
+      {/* References */}
+      <SectionHeader title="References" />
+      <Grid container spacing={2}>
         <Grid size={{ xs: 12 }}>
           <TextField
             label="Conversion"
@@ -179,7 +220,6 @@ export function CharacteristicEditor({
             fullWidth
           />
         </Grid>
-
         <Grid size={{ xs: 12, sm: 6 }}>
           <TextField
             label="Deposit"
@@ -201,9 +241,11 @@ export function CharacteristicEditor({
         </Grid>
       </Grid>
 
+      {/* Button Bar */}
+      <Divider sx={{ mt: 1 }} />
       <Stack direction="row" spacing={2} justifyContent="flex-end">
         <Button data-testid="editor-characteristic-cancel" onClick={onCancel}>Cancel</Button>
-        <Button data-testid="editor-characteristic-save" variant="contained" onClick={handleSave}>
+        <Button data-testid="editor-characteristic-save" variant="contained" onClick={handleSave} sx={{ px: 4, fontWeight: 600 }}>
           Save
         </Button>
       </Stack>

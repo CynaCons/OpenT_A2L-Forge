@@ -8,6 +8,7 @@ import {
   TextField,
   Typography,
   Alert,
+  Divider,
 } from "@mui/material";
 
 type AxisPtsData = {
@@ -27,6 +28,28 @@ interface AxisPtsEditorProps {
   initialName: string;
   onSave: () => void;
   onCancel: () => void;
+}
+
+const ACCENT = "#569cd6";
+
+function SectionHeader({ title }: { title: string }) {
+  return (
+    <Typography
+      variant="overline"
+      sx={{
+        display: "block",
+        color: "#888",
+        letterSpacing: 1.5,
+        fontSize: 10,
+        borderLeft: `2px solid ${ACCENT}`,
+        pl: 1.5,
+        mb: 0.5,
+        mt: 1,
+      }}
+    >
+      {title}
+    </Typography>
+  );
 }
 
 export function AxisPtsEditor({
@@ -78,9 +101,11 @@ export function AxisPtsEditor({
   }
 
   return (
-    <Box data-testid="editor-axis-pts" component="form" sx={{ display: "flex", flexDirection: "column", gap: 3, pt: 1 }}>
+    <Box data-testid="editor-axis-pts" component="form" sx={{ display: "flex", flexDirection: "column", gap: 2.5, pt: 1 }}>
       {error && <Alert severity="error">{error}</Alert>}
 
+      {/* Identity */}
+      <SectionHeader title="Identity" />
       <Grid container spacing={2}>
         <Grid size={{ xs: 12, sm: 6 }}>
           <TextField
@@ -101,6 +126,11 @@ export function AxisPtsEditor({
             size="small"
           />
         </Grid>
+      </Grid>
+
+      {/* Description */}
+      <SectionHeader title="Description" />
+      <Grid container spacing={2}>
         <Grid size={{ xs: 12 }}>
           <TextField
             label="Long Identifier"
@@ -112,6 +142,11 @@ export function AxisPtsEditor({
             rows={2}
           />
         </Grid>
+      </Grid>
+
+      {/* Address */}
+      <SectionHeader title="Address" />
+      <Grid container spacing={2}>
         <Grid size={{ xs: 12, sm: 6 }}>
            <TextField
             label="Address (Hex)"
@@ -130,6 +165,11 @@ export function AxisPtsEditor({
             size="small"
           />
         </Grid>
+      </Grid>
+
+      {/* Axis Config */}
+      <SectionHeader title="Axis Config" />
+      <Grid container spacing={2}>
         <Grid size={{ xs: 12, sm: 6 }}>
           <TextField
             label="Conversion"
@@ -149,6 +189,11 @@ export function AxisPtsEditor({
             size="small"
           />
         </Grid>
+      </Grid>
+
+      {/* Range */}
+      <SectionHeader title="Range" />
+      <Grid container spacing={2}>
         <Grid size={{ xs: 12, sm: 6 }}>
           <TextField
             label="Lower Limit"
@@ -181,11 +226,13 @@ export function AxisPtsEditor({
         </Grid>
       </Grid>
 
+      {/* Button Bar */}
+      <Divider sx={{ mt: 1 }} />
       <Stack direction="row" spacing={2} justifyContent="flex-end">
         <Button data-testid="editor-axis-pts-cancel" onClick={onCancel} disabled={isSaving}>
           Cancel
         </Button>
-        <Button data-testid="editor-axis-pts-save" variant="contained" onClick={handleSave} disabled={isSaving}>
+        <Button data-testid="editor-axis-pts-save" variant="contained" onClick={handleSave} disabled={isSaving} sx={{ px: 4, fontWeight: 600 }}>
           {isSaving ? "Saving..." : "Save"}
         </Button>
       </Stack>

@@ -303,6 +303,19 @@
   - [x] SRS-INDEX.md updated with R11-R15
 - [x] All 16 Rust integration tests pass, all 22 E2E tests pass
 
+## Iteration 4.95 — Visual Overhaul: Modern Card-Based A2L View
+- [x] Added `getKindColor()` helper for entity-type accent colors
+- [x] Added `getPropertySection()` helper for grouping properties by category
+- [x] Restyled entity detail header — card with colored left border, filled chips, tinted icon background
+- [x] Restyled description section — clean card with accent left border, removed dashed border
+- [x] Restyled properties grid — grouped sections with section headers, colored top-border cards, better spacing
+- [x] Restyled MeasurementEditor — section grouping (Identity, Description, Range, Precision, References)
+- [x] Restyled CharacteristicEditor — section grouping (Identity, Description, Address, Range, References)
+- [x] Restyled AxisPtsEditor — section grouping (Identity, Description, Address, Axis Config, Range)
+- [x] All editors: divider above button bar, Save button with more visual weight
+- [x] All `data-testid` attributes preserved
+- [x] Smoke test: `npm run dev` passes, `tsc --noEmit` clean
+
 ## Iteration 5 — Validation & Integrity (Series E)
 - [ ] E1: Validation engine
   - [ ] Cross-reference checks and constraints
