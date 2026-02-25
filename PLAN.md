@@ -363,3 +363,23 @@
   - [ ] Accessibility review
   - [ ] Product owner demo: UX sign-off
   - [ ] E2E: navigation + keyboard flow
+
+## Iteration 4.96 — UI/UX Fixes + GitHub Pages Landing Page
+- [x] R29: Unsaved changes protection (data loss prevention)
+  - [x] isDirty guard on handleOpenA2lDialog — triggers unsaved dialog before opening
+  - [x] isDirty guard on handleCreateA2l — triggers unsaved dialog before creating new
+  - [x] isDirty guard on sidebar recent file clicks
+  - [x] isDirty guard on file menu recent file items
+- [x] R30: Consistent editor save states
+  - [x] MeasurementEditor: added isSaving state, disabled buttons during save, "Saving..." text
+  - [x] CharacteristicEditor: added isSaving state, disabled buttons during save, "Saving..." text
+  - [x] Now matches AxisPtsEditor behavior
+- [x] R31: Missing data-testid attributes (SRS-R9 compliance)
+  - [x] App.tsx: btn-load-more-{id}, btn-load-all-{id}, btn-clear-elf-filters
+  - [x] CharacteristicEditor: long-id, address, bit-mask, lower-limit, upper-limit, conversion, deposit, max-diff
+  - [x] AxisPtsEditor: input-quantity, long-id, address, deposit-record, conversion, max-axis-points, lower-limit, upper-limit, max-diff
+- [x] R32: GitHub Pages landing page
+  - [x] docs/landing/index.html — dark theme hero landing page
+  - [x] docs/landing/style.css — VS Code-inspired dark styling
+  - [x] .github/workflows/gh-pages.yml — deploy on push to master
+- [x] Smoke test: tsc --noEmit clean, Vite dev server starts without errors

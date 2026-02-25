@@ -119,6 +119,7 @@ export function AxisPtsEditor({
         </Grid>
         <Grid size={{ xs: 12, sm: 6 }}>
           <TextField
+            data-testid="editor-axis-pts-input-quantity"
             label="Input Quantity"
             fullWidth
             value={data.input_quantity}
@@ -133,6 +134,7 @@ export function AxisPtsEditor({
       <Grid container spacing={2}>
         <Grid size={{ xs: 12 }}>
           <TextField
+            data-testid="editor-axis-pts-long-id"
             label="Long Identifier"
             fullWidth
             value={data.long_identifier}
@@ -149,6 +151,7 @@ export function AxisPtsEditor({
       <Grid container spacing={2}>
         <Grid size={{ xs: 12, sm: 6 }}>
            <TextField
+            data-testid="editor-axis-pts-address"
             label="Address (Hex)"
             fullWidth
             value={data.address}
@@ -158,6 +161,7 @@ export function AxisPtsEditor({
         </Grid>
         <Grid size={{ xs: 12, sm: 6 }}>
           <TextField
+            data-testid="editor-axis-pts-deposit-record"
             label="Deposit Record"
             fullWidth
             value={data.deposit_record}
@@ -172,6 +176,7 @@ export function AxisPtsEditor({
       <Grid container spacing={2}>
         <Grid size={{ xs: 12, sm: 6 }}>
           <TextField
+            data-testid="editor-axis-pts-conversion"
             label="Conversion"
             fullWidth
             value={data.conversion}
@@ -181,6 +186,7 @@ export function AxisPtsEditor({
         </Grid>
          <Grid size={{ xs: 12, sm: 6 }}>
           <TextField
+            data-testid="editor-axis-pts-max-axis-points"
             label="Max Axis Points"
             type="number"
             fullWidth
@@ -196,6 +202,7 @@ export function AxisPtsEditor({
       <Grid container spacing={2}>
         <Grid size={{ xs: 12, sm: 6 }}>
           <TextField
+            data-testid="editor-axis-pts-lower-limit"
             label="Lower Limit"
             type="number"
             fullWidth
@@ -206,6 +213,7 @@ export function AxisPtsEditor({
         </Grid>
         <Grid size={{ xs: 12, sm: 6 }}>
           <TextField
+            data-testid="editor-axis-pts-upper-limit"
             label="Upper Limit"
             type="number"
             fullWidth
@@ -216,6 +224,7 @@ export function AxisPtsEditor({
         </Grid>
         <Grid size={{ xs: 12, sm: 6 }}>
           <TextField
+            data-testid="editor-axis-pts-max-diff"
             label="Max Diff"
             type="number"
             fullWidth

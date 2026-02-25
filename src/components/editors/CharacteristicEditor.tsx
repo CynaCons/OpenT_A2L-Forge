@@ -72,6 +72,7 @@ export function CharacteristicEditor({
   const [data, setData] = useState<CharacteristicData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [isSaving, setIsSaving] = useState(false);
 
   useEffect(() => {
     let active = true;
@@ -95,11 +96,14 @@ export function CharacteristicEditor({
 
   const handleSave = async () => {
     if (!data) return;
+    setIsSaving(true);
+    setError(null);
     try {
       await invoke("update_characteristic", { name: initialName, data });
       onSave();
     } catch (err) {
       setError(String(err));
+      setIsSaving(false);
     }
   };
 
@@ -148,6 +152,7 @@ export function CharacteristicEditor({
       <Grid container spacing={2}>
         <Grid size={{ xs: 12 }}>
           <TextField
+            data-testid="editor-characteristic-long-id"
             label="Long Identifier"
             value={data.long_identifier}
             onChange={(e) => setData({ ...data, long_identifier: e.target.value })}
@@ -164,6 +169,7 @@ export function CharacteristicEditor({
       <Grid container spacing={2}>
         <Grid size={{ xs: 12, sm: 6 }}>
           <TextField
+            data-testid="editor-characteristic-address"
             label="Address (Hex)"
             value={data.address}
             onChange={(e) => setData({ ...data, address: e.target.value })}
@@ -173,6 +179,7 @@ export function CharacteristicEditor({
         </Grid>
         <Grid size={{ xs: 12, sm: 6 }}>
           <TextField
+            data-testid="editor-characteristic-bit-mask"
             label="Bit Mask (Hex)"
             placeholder="0x..."
             value={data.bit_mask || ""}
@@ -188,6 +195,7 @@ export function CharacteristicEditor({
       <Grid container spacing={2}>
         <Grid size={{ xs: 12, sm: 6 }}>
           <TextField
+            data-testid="editor-characteristic-lower-limit"
             label="Lower Limit"
             type="number"
             value={data.lower_limit}
@@ -198,6 +206,7 @@ export function CharacteristicEditor({
         </Grid>
         <Grid size={{ xs: 12, sm: 6 }}>
           <TextField
+            data-testid="editor-characteristic-upper-limit"
             label="Upper Limit"
             type="number"
             value={data.upper_limit}
@@ -213,6 +222,7 @@ export function CharacteristicEditor({
       <Grid container spacing={2}>
         <Grid size={{ xs: 12 }}>
           <TextField
+            data-testid="editor-characteristic-conversion"
             label="Conversion"
             value={data.conversion}
             onChange={(e) => setData({ ...data, conversion: e.target.value })}
@@ -222,6 +232,7 @@ export function CharacteristicEditor({
         </Grid>
         <Grid size={{ xs: 12, sm: 6 }}>
           <TextField
+            data-testid="editor-characteristic-deposit"
             label="Deposit"
             value={data.deposit}
             onChange={(e) => setData({ ...data, deposit: e.target.value })}
@@ -231,6 +242,7 @@ export function CharacteristicEditor({
         </Grid>
         <Grid size={{ xs: 12, sm: 6 }}>
           <TextField
+            data-testid="editor-characteristic-max-diff"
             label="Max Diff"
             type="number"
             value={data.max_diff}
@@ -244,9 +256,9 @@ export function CharacteristicEditor({
       {/* Button Bar */}
       <Divider sx={{ mt: 1 }} />
       <Stack direction="row" spacing={2} justifyContent="flex-end">
-        <Button data-testid="editor-characteristic-cancel" onClick={onCancel}>Cancel</Button>
-        <Button data-testid="editor-characteristic-save" variant="contained" onClick={handleSave} sx={{ px: 4, fontWeight: 600 }}>
-          Save
+        <Button data-testid="editor-characteristic-cancel" onClick={onCancel} disabled={isSaving}>Cancel</Button>
+        <Button data-testid="editor-characteristic-save" variant="contained" onClick={handleSave} disabled={isSaving} sx={{ px: 4, fontWeight: 600 }}>
+          {isSaving ? "Saving..." : "Save"}
         </Button>
       </Stack>
     </Box>

@@ -74,6 +74,7 @@ export function MeasurementEditor({
   const [data, setData] = useState<MeasurementData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [isSaving, setIsSaving] = useState(false);
 
   useEffect(() => {
     let active = true;
@@ -97,11 +98,14 @@ export function MeasurementEditor({
 
   const handleSave = async () => {
     if (!data) return;
+    setIsSaving(true);
+    setError(null);
     try {
       await invoke("update_measurement", { name: initialName, data });
       onSave();
     } catch (err) {
       setError(String(err));
+      setIsSaving(false);
     }
   };
 
@@ -245,9 +249,9 @@ export function MeasurementEditor({
       {/* Button Bar */}
       <Divider sx={{ mt: 1 }} />
       <Stack direction="row" spacing={2} justifyContent="flex-end">
-        <Button data-testid="editor-measurement-cancel" onClick={onCancel}>Cancel</Button>
-        <Button data-testid="editor-measurement-save" variant="contained" onClick={handleSave} sx={{ px: 4, fontWeight: 600 }}>
-          Save
+        <Button data-testid="editor-measurement-cancel" onClick={onCancel} disabled={isSaving}>Cancel</Button>
+        <Button data-testid="editor-measurement-save" variant="contained" onClick={handleSave} disabled={isSaving} sx={{ px: 4, fontWeight: 600 }}>
+          {isSaving ? "Saving..." : "Save"}
         </Button>
       </Stack>
     </Box>

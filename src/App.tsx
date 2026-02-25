@@ -691,6 +691,11 @@ function App() {
   // --- Handlers ---
 
   async function handleOpenA2lDialog() {
+    if (isDirty) {
+      setPendingAction(() => () => handleOpenA2lDialog());
+      setShowUnsavedDialog(true);
+      return;
+    }
     const filePath = await open({
       title: "Open A2L File",
       multiple: false,
@@ -734,6 +739,11 @@ function App() {
   }
 
     async function handleCreateA2l() {
+    if (isDirty) {
+      setPendingAction(() => () => handleCreateA2l());
+      setShowUnsavedDialog(true);
+      return;
+    }
     if (isBusy) return;
     setIsBusy(true);
     pushStatus("info", "Creating new A2L...", false);
@@ -1174,7 +1184,14 @@ function App() {
                         <List dense>
                             {recentA2lFiles.map(file => (
                                 <ListItemButton key={file.name + file.lastOpened} onClick={() => {
-                                    if (file.path) handleLoadA2lFromPath(file.path);
+                                    if (file.path) {
+                                      if (isDirty) {
+                                        setPendingAction(() => () => handleLoadA2lFromPath(file.path!));
+                                        setShowUnsavedDialog(true);
+                                        return;
+                                      }
+                                      handleLoadA2lFromPath(file.path);
+                                    }
                                 }}>
                                     <ListItemIcon sx={{ minWidth: 32 }}><DescriptionIcon fontSize="small" sx={{ fontSize: 16 }} /></ListItemIcon>
                                     <ListItemText 
@@ -1239,6 +1256,7 @@ function App() {
                                                 {remaining > 0 && (
                                                     <Stack direction="row" spacing={1} sx={{ ml: 2, mt: 0.5 }}>
                                                      <Button
+                                                        data-testid={`btn-load-more-${section.id}`}
                                                         size="small"
                                                         sx={{ fontSize: 10, justifyContent: "flex-start" }}
                                                         onClick={(e) => {
@@ -1249,6 +1267,7 @@ function App() {
                                                         Load 500 more ({remaining} remaining)
                                                      </Button>
                                                      <Button
+                                                        data-testid={`btn-load-all-${section.id}`}
                                                         size="small"
                                                         sx={{ fontSize: 10, justifyContent: "flex-start" }}
                                                         onClick={(e) => {
@@ -1451,7 +1470,7 @@ function App() {
                                   {elfBindOptions.map(bind => <MenuItem key={bind} value={bind}>{bind}</MenuItem>)}
                               </TextField>
                               {(elfFilterTypes.size > 0 || elfFilterSections.size > 0 || elfFilterBinds.size > 0) && (
-                                  <Button size="small" onClick={() => {
+                                  <Button data-testid="btn-clear-elf-filters" size="small" onClick={() => {
                                       setElfFilterTypes(new Set());
                                       setElfFilterSections(new Set());
                                       setElfFilterBinds(new Set());
@@ -1852,7 +1871,17 @@ function App() {
                 </MenuItem>
                 {recentA2lFiles.length > 0 && <Divider sx={{ borderColor: "#444" }} />}
                 {recentA2lFiles.filter(f => f.path).slice(0, 5).map(f => (
-                    <MenuItem key={f.path} onClick={() => { if (f.path) handleLoadA2lFromPath(f.path); setFileMenuAnchor(null); }} sx={{ fontSize: 12 }}>
+                    <MenuItem key={f.path} onClick={() => {
+                      if (f.path) {
+                        if (isDirty) {
+                          setPendingAction(() => () => handleLoadA2lFromPath(f.path!));
+                          setShowUnsavedDialog(true);
+                        } else {
+                          handleLoadA2lFromPath(f.path);
+                        }
+                      }
+                      setFileMenuAnchor(null);
+                    }} sx={{ fontSize: 12 }}>
                         {f.name}
                     </MenuItem>
                 ))}
