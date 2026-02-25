@@ -1,12 +1,12 @@
 # PLAN — OpenT_A2L-Forge
 
-**Last updated:** 2026-02-02
+**Last updated:** 2026-02-19
 
 ## Iteration 0 — Foundations
 - [x] Repo scaffolding, build, and CI basics
   - [x] Tauri + React + TypeScript app skeleton builds locally
   - [x] Rust backend command wiring established
-  - [x] Product owner demo: “Hello A2L-Forge” window opens
+  - [x] Product owner demo: "Hello A2L-Forge" window opens
   - [x] E2E: smoke test launches app and closes cleanly
 
 ## Iteration 1 — Core A2L I/O (Series A)
@@ -75,16 +75,246 @@
   - [x] Display symbol table and types
   - [x] Product owner demo: import ELF and browse symbols
   - [x] E2E: import ELF → list symbols
-- [x] D2: Symbol-to-A2L mapping
+- [x] D2: Symbol-to-A2L mapping (Basic)
   - [x] Map variables to MEASUREMENT/CHARACTERISTIC
   - [x] Address resolution and name normalization
   - [x] Product owner demo: map symbols to A2L
   - [x] E2E: import ELF → map → save
-- [ ] D3: Struct-based generation (Deferred to Iteration 6)
-  - [ ] Generate entries from struct layouts
-  - [ ] Conflict handling UI
-  - [ ] Product owner demo: generate from structs
-  - [ ] E2E: import structs → generate → export
+- [x] D2.5: Enhanced Symbol Mapping
+  - [x] Symbol search and filtering (by type, section, name)
+  - [x] Smart data type inference from symbol size
+  - [x] Conflict detection and resolution
+  - [x] Preview dialog with batch configuration
+  - [x] Module selection for multi-module projects
+  - [x] Address overflow validation
+  - [x] Product owner demo: filtered import with preview
+  - [x] E2E: filter → preview → resolve conflicts → import
+- [x] D3: DWARF-based struct generation
+  - [x] Parse DWARF debug info for type names (gimli)
+  - [x] Expand struct variables into member symbols
+  - [x] Display DWARF Type column in ELF table
+  - [x] E2E: mock data with dwarf_type fields
+
+## Iteration 4.5 — Platform Fixes & File Watching
+- [x] R1: Fix Window Frame Buttons
+  - [x] Add core:window permissions (minimize, close, toggle-maximize, is-maximized)
+  - [x] Replace setInterval polling with onResized event listener
+  - [x] Add aria-label attributes for testability
+  - [x] SRS: docs/srs/SRS-R1-Window-Controls.md
+  - [x] E2E: tests/e2e/window-controls.spec.ts
+- [x] R2: Fix ELF File Dialog
+  - [x] Add dialog:default permission to capabilities
+  - [x] SRS: docs/srs/SRS-R2-ELF-Dialog.md
+- [x] R3: Save A2L with Native Dialog
+  - [x] Replace window.prompt() with native save() dialog
+  - [x] SRS: docs/srs/SRS-R3-Save-As.md
+  - [x] E2E: tests/e2e/save-as.spec.ts
+- [x] R4: A2L Open uses Native Dialog
+  - [x] Replace HTML file input with @tauri-apps/plugin-dialog open()
+  - [x] Ensures currentFilePath is set correctly for subsequent Save
+  - [x] All existing tests updated to use dialog-based approach
+- [x] R5: ELF File Watching + Update ECU Addresses
+  - [x] Add notify crate for file watching
+  - [x] Spawn file watcher thread on ELF load
+  - [x] Emit elf-changed events to frontend
+  - [x] update_ecu_addresses command matches symbols to measurements
+  - [x] Notification banner + reload/dismiss actions in UI
+  - [x] Update ECU Addresses button in ELF Inspector
+  - [x] SRS: docs/srs/SRS-R5-ELF-Watcher.md
+  - [x] E2E: tests/e2e/elf-watcher.spec.ts
+- [x] R6: SRS Documentation Index
+  - [x] docs/srs/SRS-INDEX.md with all requirement docs
+- [x] R7: Binary E2E Test Project
+  - [x] Added binary project to playwright.config.ts
+  - [x] tests/e2e/binary/ test files for real backend
+  - [x] SRS: docs/srs/SRS-R7-Binary-E2E.md
+- [x] R8: SRS for ELF Import Workflow
+  - [x] docs/srs/SRS-R8-ELF-Import-Workflow.md (R8.1-R8.8)
+- [x] R9: SRS for data-testid Convention
+  - [x] docs/srs/SRS-R9-Data-TestID.md (R9.1-R9.3 with full testid reference table)
+- [x] R10: SRS for Recently Used Files
+  - [x] docs/srs/SRS-R10-Recent-Files.md (R10.1-R10.4)
+- [x] PRD: Product Requirements Document
+  - [x] docs/PRD.md (vision, users, features, workflows, NFRs)
+- [x] Updated SRS-INDEX.md with R8, R9, R10 entries
+- [x] R11: CLAUDE.md repo conventions
+  - [x] Created CLAUDE.md with build commands, test commands, architecture, conventions
+- [x] R12: Fix "0 Labels Loaded" ELF Bug
+  - [x] Added `.dynsym` fallback when `.symtab` is empty in `core_load_elf_symbols_from_buffer`
+  - [x] Uses correct string table (`dynstrtab` vs `strtab`) based on symbol source
+  - [x] All 9 Rust integration tests pass
+- [x] R13: data-testid Migration
+  - [x] Added 30+ `data-testid` attributes to `src/App.tsx`
+  - [x] Added `data-testid` attributes to all 3 editor components
+  - [x] Migrated all 16 mock E2E test files to `getByTestId()` selectors
+  - [x] Migrated all 5 binary E2E test files to `getByTestId()` selectors
+  - [x] All 30 mock tests passing
+
+## Iteration 4.6 — ELF Workflow Fixes & Test Audit
+- [x] Bug Fix: "Replace All" conflict resolution no longer creates duplicates
+  - [x] Backend `create_measurements_with_mapping` now retains/replaces existing measurements
+  - [x] Mock `create_measurements_with_mapping` updated to match
+- [x] Bug Fix: Missing `core:window:allow-is-maximized` permission added
+- [x] Bug Fix: A2L Open button uses native dialog instead of HTML file input
+  - [x] `handleOpenA2lDialog()` + `handleLoadA2lFromPath()` added
+  - [x] `handleFileSelect()` removed (no longer needed)
+  - [x] All 13 existing tests updated to use dialog-based A2L loading
+- [x] Mock system enhanced
+  - [x] `export_a2l` mock generates simplified A2L string from state
+  - [x] `a2lFilePath` config option for distinguishing A2L vs ELF dialog opens
+  - [x] Richer default ELF symbol set (8 symbols incl. struct members)
+- [x] Comprehensive E2E test coverage (30 tests total, all passing)
+  - [x] tests/e2e/xcp-variable-workflow.spec.ts (2 tests) — full user journey
+  - [x] tests/e2e/conflict-resolution.spec.ts (3 tests) — skip/replace/cancel
+  - [x] tests/e2e/dwarf-struct-members.spec.ts (3 tests) — DWARF type display, member import
+  - [x] tests/e2e/elf-filters.spec.ts (5 tests) — search, sort, filter chips
+
+## Iteration 4.7 — Binary E2E Tests with Real ELF and A2L Files
+- [x] Refactored lib.rs: extracted core functions (no Tauri dependency)
+  - [x] `core_load_a2l_from_string`, `core_load_a2l_from_path`
+  - [x] `core_load_elf_symbols`, `core_load_elf_symbols_from_buffer`
+  - [x] `core_create_measurements`, `core_check_conflicts`
+  - [x] `core_update_ecu_addresses`, `core_export_a2l`
+  - [x] Made `ElfSymbol`, `SymbolWithMapping`, `ConflictReport`, `UpdateEcuAddressesResult` public with pub fields
+  - [x] Tauri commands are now thin wrappers over core functions
+- [x] Rust integration tests (9 tests, all passing)
+  - [x] `src-tauri/tests/integration.rs`
+  - [x] Tests use real fixture files: software_b.a2l, debugdata_gcc.elf, update_test.elf
+  - [x] Covers: A2L loading, ELF parsing, measurement creation, duplicate replacement, conflict checking, export, ECU address updates
+- [x] Node.js ELF reader (`tests/e2e/binary/elf-reader.ts`)
+  - [x] Zero-dependency ELF parser using raw Buffer parsing
+  - [x] Supports ELF32/ELF64, LE/BE, .symtab and .dynsym fallback
+  - [x] Returns symbols matching ElfSymbol interface shape
+- [x] Playwright binary tests run against real release binary via CDP
+  - [x] `tests/e2e/binary/fixtures.ts` — worker-scoped fixture spawns release binary, connects Playwright via `chromium.connectOverCDP()` to WebView2
+  - [x] `WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS=--remote-debugging-port=9222` enables CDP
+  - [x] Binary process lifecycle managed per-worker (spawn once, reuse, kill on teardown)
+  - [x] `tests/e2e/binary/full-flow.spec.ts` (3 tests) — New A2L, metadata, tree
+  - [x] `tests/e2e/binary/real-a2l-load.spec.ts` (3 tests) — real backend IPC, app shell
+  - [x] `tests/e2e/binary/real-elf-data.spec.ts` (2 tests) — ELF inspector, view switching
+  - [x] `tests/e2e/binary/elf-load.spec.ts` (1 test) — ELF dialog permissions
+  - [x] `tests/e2e/binary/window-controls.spec.ts` (1 test) — real window IPC
+- [x] All tests green: 30 mock Playwright + 10 binary Playwright (real binary via CDP) + 9 Rust integration
+
+## Iteration 4.8 — Real Binary E2E Migration & UX Polish
+- [x] R14: Ban mocks — all E2E tests use real release binary via CDP
+  - [x] Deleted all 16 mock spec files and mocks.ts
+  - [x] Deleted tests/e2e/binary/ subdirectory (merged into main test dir)
+  - [x] Rewrote playwright.config.ts — single project, 90s timeout, 1 worker
+- [x] R15: Shared test infrastructure (tests/e2e/fixtures.ts)
+  - [x] Worker-scoped fixture spawns release binary with CDP on port 9222
+  - [x] `window.__E2E__` hooks: loadA2lFromPath, loadElfFromPath, createA2l
+  - [x] Helper functions: openA2lFile(), openElfFile(), createNewA2l(), tauriInvoke()
+  - [x] FIXTURES object with paths to real A2L/ELF fixture files
+- [x] R16: ELF symbol loading — iterate BOTH .symtab AND .dynsym with deduplication
+  - [x] Uses HashSet for name deduplication across symbol tables
+  - [x] Correct string table (strtab vs dynstrtab) per symbol source
+  - [x] All 9 Rust integration tests pass
+- [x] R17: UI fixes
+  - [x] ELF Inspector module dropdown overflow fixed (sidebar overflow:hidden)
+  - [x] Keyboard shortcuts: Ctrl+O (open), Ctrl+S (save), Ctrl+N (new), Escape (cancel edit)
+  - [x] Error messages never auto-dismiss
+  - [x] LinearProgress loading indicator when busy
+  - [x] data-testid="heading-settings" added
+- [x] R18: 22 binary E2E tests (all passing against real release .exe)
+  - [x] app-shell.spec.ts (5 tests) — sidebar, views, layout
+  - [x] window-controls.spec.ts (2 tests) — min/max/close buttons, titlebar
+  - [x] new-a2l.spec.ts (3 tests) — create new A2L, metadata, status bar
+  - [x] a2l-loading.spec.ts (3 tests) — load real A2L, tree, search
+  - [x] entity-editing.spec.ts (1 test) — load A2L, expand tree, verify sections
+  - [x] save-flow.spec.ts (1 test) — save button visibility
+  - [x] elf-loading.spec.ts (4 tests) — load ELF, sort, search, replace
+  - [x] elf-to-a2l.spec.ts (2 tests) — full import workflow, view switching
+  - [x] elf-update-ecu.spec.ts (1 test) — ECU address update after import
+- [x] CLAUDE.md updated: NO MOCKS rule, TaskList required, SRS refs, PLAN.md format
+- [x] R19: UX Polish (expert review)
+  - [x] Unsaved changes guard — confirmation dialog before close/open when dirty
+  - [x] File menu bar (New, Open, Save, Save As, Recent Files submenu)
+  - [x] Save As (Ctrl+Shift+S) with native dialog
+  - [x] Titlebar shows filename and dirty indicator
+  - [x] Improved empty state with actionable buttons and shortcut hints
+  - [x] Tooltip for disabled "Add to Project" button
+  - [x] Settings panel: Clear Recent Files, Keyboard Shortcuts reference, About
+  - [x] ARIA labels and shortcut hints on toolbar buttons
+  - [x] Tree item description tooltips
+  - [x] Status bar click-to-dismiss for errors, dirty indicator dot
+  - [x] ELF watcher uses stored `currentElfPath` for reliable reload
+- [x] R20: Test stabilization
+  - [x] All 22 E2E tests pass (21 clean + 1 flaky with retry)
+  - [x] Migrated tests to use data-testid selectors (entity-tree, titlebar-filename, status-message)
+  - [x] All 9 Rust integration tests pass
+- [x] R21: Enhanced struct member handling in ELF view
+  - [x] DWARF typedef/const/volatile/restrict chaining for proper struct resolution
+  - [x] `infer_a2l_type_from_member()` — DWARF-aware type inference for struct members
+  - [x] `resolve_struct_through_chain()` / `resolve_size_through_chain()` — follow type indirection
+  - [x] Collapsible struct parent rows with expand/collapse arrows
+  - [x] Struct parent checkbox selects/deselects all members
+  - [x] Member rows indented with short name + full qualified name
+  - [x] ECU addresses displayed as hex (0x format) in tree details
+  - [x] Module selector moved to ELF toolbar header (only shown for multi-module)
+- [x] R22: DWARF5 support and comprehensive struct member parsing
+  - [x] Replaced manual DWARF section loading with `gimli::DwarfSections::load()`
+  - [x] Supports DWARF5 `DW_FORM_strx` string resolution via `.debug_str_offsets`
+  - [x] Runtime endianness detection from ELF header (LE/BE)
+  - [x] Added `DW_TAG_enumeration_type` for proper enum byte size resolution
+  - [x] Added `DW_TAG_union_type` support
+  - [x] Added byte size tracking for `DW_TAG_array_type`
+  - [x] 3 Voyant ELF integration tests: struct member expansion, data type verification, A2L measurement creation
+  - [x] All 12 Rust tests pass, all 22 E2E tests pass
+
+## Iteration 4.9 — CHARACTERISTIC Import, Arrays, Enums & Large Files
+- [x] R23: Array support with MATRIX_DIM
+  - [x] DWARF DW_TAG_array_type + DW_TAG_subrange_type parsing for element type/count
+  - [x] Element type resolution through typedef chain for correct A2L type inference
+  - [x] MATRIX_DIM set on Measurement/Characteristic for array symbols
+  - [x] Overflow protection with checked_add for DW_AT_upper_bound
+  - [x] Display type as "element_type[N]" in DWARF type column
+  - [x] SRS: docs/srs/SRS-R12-Array-Support.md
+  - [x] Test: test_array_members_get_matrix_dim
+- [x] R24: CHARACTERISTIC import from ELF (instead of MEASUREMENT)
+  - [x] `core_create_characteristics()` — VALUE for scalars, VAL_BLK for arrays
+  - [x] Auto-create RECORD_LAYOUT (__val_TYPE) with FncValues
+  - [x] Frontend updated: `create_characteristics_from_elf` Tauri command
+  - [x] Conflict detection checks both measurements AND characteristics
+  - [x] SRS: docs/srs/SRS-R13-Characteristic-Import.md
+  - [x] Tests: test_create_characteristics_from_elf_symbols, test_create_characteristics_replaces_existing
+- [x] R25: Enum COMPU_METHOD derivation from DWARF
+  - [x] DW_TAG_enumerator parsing for enum name/value pairs
+  - [x] Enum resolution through typedef chain for variables and struct members
+  - [x] Auto-create COMPU_VTAB (TAB_VERB) + COMPU_METHOD for enum types
+  - [x] Characteristic conversion auto-set to generated COMPU_METHOD
+  - [x] SRS: docs/srs/SRS-R14-Enum-CompuMethod.md
+  - [x] Test: test_enum_compu_method_creation
+- [x] R26: ELF update propagation for arrays and enums
+  - [x] `core_update_ecu_addresses` extended to update characteristics (address, array dims)
+  - [x] COMPU_VTAB/COMPU_METHOD overwritten on ELF change for enum types
+  - [x] Measurement MATRIX_DIM updated on array size change
+- [x] R27: Entity list performance for large A2L files
+  - [x] Search bypasses rendering limit — all matching items shown when search active
+  - [x] Default batch size increased to 500
+  - [x] "Load all" button + "Load 500 more (N remaining)" display
+  - [x] SRS: docs/srs/SRS-R15-Entity-List-Performance.md
+- [x] R28: SRS documentation for struct, array, characteristic, enum features
+  - [x] SRS-R11-Struct-Member-Expansion.md
+  - [x] SRS-R12-Array-Support.md
+  - [x] SRS-R13-Characteristic-Import.md
+  - [x] SRS-R14-Enum-CompuMethod.md
+  - [x] SRS-R15-Entity-List-Performance.md
+  - [x] SRS-INDEX.md updated with R11-R15
+- [x] All 16 Rust integration tests pass, all 22 E2E tests pass
+
+## Iteration 4.95 — Visual Overhaul: Modern Card-Based A2L View
+- [x] Added `getKindColor()` helper for entity-type accent colors
+- [x] Added `getPropertySection()` helper for grouping properties by category
+- [x] Restyled entity detail header — card with colored left border, filled chips, tinted icon background
+- [x] Restyled description section — clean card with accent left border, removed dashed border
+- [x] Restyled properties grid — grouped sections with section headers, colored top-border cards, better spacing
+- [x] Restyled MeasurementEditor — section grouping (Identity, Description, Range, Precision, References)
+- [x] Restyled CharacteristicEditor — section grouping (Identity, Description, Address, Range, References)
+- [x] Restyled AxisPtsEditor — section grouping (Identity, Description, Address, Axis Config, Range)
+- [x] All editors: divider above button bar, Save button with more visual weight
+- [x] All `data-testid` attributes preserved
+- [x] Smoke test: `npm run dev` passes, `tsc --noEmit` clean
 
 ## Iteration 5 — Validation & Integrity (Series E)
 - [ ] E1: Validation engine
@@ -133,3 +363,23 @@
   - [ ] Accessibility review
   - [ ] Product owner demo: UX sign-off
   - [ ] E2E: navigation + keyboard flow
+
+## Iteration 4.96 — UI/UX Fixes + GitHub Pages Landing Page
+- [x] R29: Unsaved changes protection (data loss prevention)
+  - [x] isDirty guard on handleOpenA2lDialog — triggers unsaved dialog before opening
+  - [x] isDirty guard on handleCreateA2l — triggers unsaved dialog before creating new
+  - [x] isDirty guard on sidebar recent file clicks
+  - [x] isDirty guard on file menu recent file items
+- [x] R30: Consistent editor save states
+  - [x] MeasurementEditor: added isSaving state, disabled buttons during save, "Saving..." text
+  - [x] CharacteristicEditor: added isSaving state, disabled buttons during save, "Saving..." text
+  - [x] Now matches AxisPtsEditor behavior
+- [x] R31: Missing data-testid attributes (SRS-R9 compliance)
+  - [x] App.tsx: btn-load-more-{id}, btn-load-all-{id}, btn-clear-elf-filters
+  - [x] CharacteristicEditor: long-id, address, bit-mask, lower-limit, upper-limit, conversion, deposit, max-diff
+  - [x] AxisPtsEditor: input-quantity, long-id, address, deposit-record, conversion, max-axis-points, lower-limit, upper-limit, max-diff
+- [x] R32: GitHub Pages landing page
+  - [x] docs/landing/index.html — dark theme hero landing page
+  - [x] docs/landing/style.css — VS Code-inspired dark styling
+  - [x] .github/workflows/gh-pages.yml — deploy on push to master
+- [x] Smoke test: tsc --noEmit clean, Vite dev server starts without errors

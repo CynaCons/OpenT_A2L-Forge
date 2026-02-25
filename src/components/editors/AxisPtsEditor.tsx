@@ -8,6 +8,7 @@ import {
   TextField,
   Typography,
   Alert,
+  Divider,
 } from "@mui/material";
 
 type AxisPtsData = {
@@ -27,6 +28,28 @@ interface AxisPtsEditorProps {
   initialName: string;
   onSave: () => void;
   onCancel: () => void;
+}
+
+const ACCENT = "#569cd6";
+
+function SectionHeader({ title }: { title: string }) {
+  return (
+    <Typography
+      variant="overline"
+      sx={{
+        display: "block",
+        color: "#888",
+        letterSpacing: 1.5,
+        fontSize: 10,
+        borderLeft: `2px solid ${ACCENT}`,
+        pl: 1.5,
+        mb: 0.5,
+        mt: 1,
+      }}
+    >
+      {title}
+    </Typography>
+  );
 }
 
 export function AxisPtsEditor({
@@ -78,12 +101,15 @@ export function AxisPtsEditor({
   }
 
   return (
-    <Box component="form" sx={{ display: "flex", flexDirection: "column", gap: 3, pt: 1 }}>
+    <Box data-testid="editor-axis-pts" component="form" sx={{ display: "flex", flexDirection: "column", gap: 2.5, pt: 1 }}>
       {error && <Alert severity="error">{error}</Alert>}
 
+      {/* Identity */}
+      <SectionHeader title="Identity" />
       <Grid container spacing={2}>
         <Grid size={{ xs: 12, sm: 6 }}>
           <TextField
+            data-testid="editor-axis-pts-name"
             label="Name"
             fullWidth
             value={data.name}
@@ -93,6 +119,7 @@ export function AxisPtsEditor({
         </Grid>
         <Grid size={{ xs: 12, sm: 6 }}>
           <TextField
+            data-testid="editor-axis-pts-input-quantity"
             label="Input Quantity"
             fullWidth
             value={data.input_quantity}
@@ -100,8 +127,14 @@ export function AxisPtsEditor({
             size="small"
           />
         </Grid>
+      </Grid>
+
+      {/* Description */}
+      <SectionHeader title="Description" />
+      <Grid container spacing={2}>
         <Grid size={{ xs: 12 }}>
           <TextField
+            data-testid="editor-axis-pts-long-id"
             label="Long Identifier"
             fullWidth
             value={data.long_identifier}
@@ -111,8 +144,14 @@ export function AxisPtsEditor({
             rows={2}
           />
         </Grid>
+      </Grid>
+
+      {/* Address */}
+      <SectionHeader title="Address" />
+      <Grid container spacing={2}>
         <Grid size={{ xs: 12, sm: 6 }}>
            <TextField
+            data-testid="editor-axis-pts-address"
             label="Address (Hex)"
             fullWidth
             value={data.address}
@@ -122,6 +161,7 @@ export function AxisPtsEditor({
         </Grid>
         <Grid size={{ xs: 12, sm: 6 }}>
           <TextField
+            data-testid="editor-axis-pts-deposit-record"
             label="Deposit Record"
             fullWidth
             value={data.deposit_record}
@@ -129,8 +169,14 @@ export function AxisPtsEditor({
             size="small"
           />
         </Grid>
+      </Grid>
+
+      {/* Axis Config */}
+      <SectionHeader title="Axis Config" />
+      <Grid container spacing={2}>
         <Grid size={{ xs: 12, sm: 6 }}>
           <TextField
+            data-testid="editor-axis-pts-conversion"
             label="Conversion"
             fullWidth
             value={data.conversion}
@@ -140,6 +186,7 @@ export function AxisPtsEditor({
         </Grid>
          <Grid size={{ xs: 12, sm: 6 }}>
           <TextField
+            data-testid="editor-axis-pts-max-axis-points"
             label="Max Axis Points"
             type="number"
             fullWidth
@@ -148,8 +195,14 @@ export function AxisPtsEditor({
             size="small"
           />
         </Grid>
+      </Grid>
+
+      {/* Range */}
+      <SectionHeader title="Range" />
+      <Grid container spacing={2}>
         <Grid size={{ xs: 12, sm: 6 }}>
           <TextField
+            data-testid="editor-axis-pts-lower-limit"
             label="Lower Limit"
             type="number"
             fullWidth
@@ -160,6 +213,7 @@ export function AxisPtsEditor({
         </Grid>
         <Grid size={{ xs: 12, sm: 6 }}>
           <TextField
+            data-testid="editor-axis-pts-upper-limit"
             label="Upper Limit"
             type="number"
             fullWidth
@@ -170,6 +224,7 @@ export function AxisPtsEditor({
         </Grid>
         <Grid size={{ xs: 12, sm: 6 }}>
           <TextField
+            data-testid="editor-axis-pts-max-diff"
             label="Max Diff"
             type="number"
             fullWidth
@@ -180,11 +235,13 @@ export function AxisPtsEditor({
         </Grid>
       </Grid>
 
+      {/* Button Bar */}
+      <Divider sx={{ mt: 1 }} />
       <Stack direction="row" spacing={2} justifyContent="flex-end">
-        <Button onClick={onCancel} disabled={isSaving}>
+        <Button data-testid="editor-axis-pts-cancel" onClick={onCancel} disabled={isSaving}>
           Cancel
         </Button>
-        <Button variant="contained" onClick={handleSave} disabled={isSaving}>
+        <Button data-testid="editor-axis-pts-save" variant="contained" onClick={handleSave} disabled={isSaving} sx={{ px: 4, fontWeight: 600 }}>
           {isSaving ? "Saving..." : "Save"}
         </Button>
       </Stack>
