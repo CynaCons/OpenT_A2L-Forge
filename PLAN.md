@@ -383,3 +383,13 @@
   - [x] docs/landing/style.css — VS Code-inspired dark styling
   - [x] .github/workflows/gh-pages.yml — deploy on push to master
 - [x] Smoke test: tsc --noEmit clean, Vite dev server starts without errors
+
+## Iteration 4.97 — A2L Detail View: Clean Table Layout Rework
+- [x] Replaced Card-based entity detail header with compact Box layout (h5, bottom border, inline description)
+- [x] Removed separate Description Card — folded into header as italic secondary text
+- [x] Replaced card-per-property grid with two-column CSS grid table layout (180px label | 1fr value)
+- [x] Added section headers (uppercase overline + Divider) replacing colored-border section labels
+- [x] Alternating row backgrounds (transparent / rgba(255,255,255,0.02)) for readability
+- [x] Removed unused Card/CardContent MUI imports
+- [x] All data-testid attributes preserved (entity-detail, btn-edit)
+- [x] Smoke test: tsc --noEmit clean, Vite dev server starts without errors

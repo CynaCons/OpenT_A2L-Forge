@@ -22,8 +22,6 @@ import {
   Tooltip,
   InputBase,
   LinearProgress,
-  Card,
-  CardContent,
   Table,
   TableBody,
   TableCell,
@@ -1738,36 +1736,29 @@ function App() {
                         )}
                      </Paper>
                 ) : (
-                    <Box data-testid="entity-detail" sx={{ maxWidth: 900, mx: "auto", display: "flex", flexDirection: "column", gap: 3 }}>
+                    <Box data-testid="entity-detail" sx={{ maxWidth: 900, mx: "auto" }}>
                        {/* Header Section */}
-                       <Card variant="outlined" sx={{ bgcolor: "#1e1e1e", borderColor: "#333", borderLeft: `3px solid ${getKindColor(selectedItem.kind)}` }}>
-                         <CardContent sx={{ pb: "16px !important" }}>
-                           <Stack direction="row" alignItems="center" spacing={2.5}>
-                                <Box sx={{ p: 1.8, bgcolor: `${getKindColor(selectedItem.kind)}15`, borderRadius: 2, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 28 }}>
+                       <Box sx={{ pb: 3, borderBottom: "1px solid #333" }}>
+                           <Stack direction="row" alignItems="center" spacing={2}>
+                                <Box sx={{ p: 1.2, bgcolor: `${getKindColor(selectedItem.kind)}15`, borderRadius: 1.5, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 24 }}>
                                     {getKindIcon(selectedItem.kind)}
                                 </Box>
-                                <Box>
-                                    <Typography variant="h4" sx={{ fontWeight: 600 }}>{selectedItem.name}</Typography>
-                                    <Stack direction="row" spacing={1} alignItems="center" sx={{ mt: 0.5 }}>
-                                        <Chip label={selectedItem.kind} size="small" sx={{ borderRadius: 1, height: 22, fontSize: 11, fontWeight: 600, bgcolor: `${getKindColor(selectedItem.kind)}25`, color: getKindColor(selectedItem.kind), border: "none" }} />
-                                        <Typography variant="body2" color="text.secondary" sx={{ fontFamily: "monospace" }}>ID: {selectedItem.id}</Typography>
+                                <Box sx={{ flex: 1 }}>
+                                    <Typography variant="h5" sx={{ fontWeight: 600, lineHeight: 1.3 }}>{selectedItem.name}</Typography>
+                                    <Stack direction="row" spacing={1} alignItems="center" sx={{ mt: 0.3 }}>
+                                        <Chip label={selectedItem.kind} size="small" sx={{ borderRadius: 1, height: 20, fontSize: 10, fontWeight: 600, bgcolor: `${getKindColor(selectedItem.kind)}25`, color: getKindColor(selectedItem.kind), border: "none" }} />
+                                        <Typography variant="body2" color="text.secondary" sx={{ fontFamily: "monospace", fontSize: 12 }}>ID: {selectedItem.id}</Typography>
                                     </Stack>
                                 </Box>
                            </Stack>
-                         </CardContent>
-                       </Card>
-                       
-                       {/* Description Section */}
-                       <Card variant="outlined" sx={{ bgcolor: "#2a2a2e", borderColor: "#333", borderLeft: `3px solid ${getKindColor(selectedItem.kind)}` }}>
-                         <CardContent sx={{ pb: "16px !important" }}>
-                           <Typography variant="overline" sx={{ color: "#888", letterSpacing: 1.5, fontSize: 10 }}>DESCRIPTION</Typography>
-                           <Typography variant="body1" sx={{ mt: 0.5, fontStyle: selectedItem.description ? "normal" : "italic", color: selectedItem.description ? "text.primary" : "text.secondary" }}>
-                              {selectedItem.description || "No description provided."}
-                           </Typography>
-                         </CardContent>
-                       </Card>
+                           {selectedItem.description && (
+                               <Typography variant="body2" sx={{ mt: 1.5, fontStyle: "italic", color: "text.secondary", pl: 0.5 }}>
+                                   {selectedItem.description}
+                               </Typography>
+                           )}
+                       </Box>
 
-                        {/* Properties Grid — grouped by section */}
+                        {/* Properties — grouped by section, table layout */}
                         {(() => {
                           const sections: Record<string, typeof selectedItem.details> = {};
                           selectedItem.details?.forEach(d => {
@@ -1775,20 +1766,20 @@ function App() {
                             if (!sections[sec]) sections[sec] = [];
                             sections[sec]!.push(d);
                           });
-                          const kindColor = getKindColor(selectedItem.kind);
+                          let globalIdx = 0;
                           return Object.entries(sections).map(([section, props]) => (
                             <Box key={section}>
-                              <Typography variant="overline" sx={{ mb: 1.5, display: "block", color: "#888", letterSpacing: 1.5, fontSize: 10, borderLeft: `2px solid ${kindColor}`, pl: 1.5 }}>{section}</Typography>
-                              <Box sx={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(300px, 1fr))", gap: 2 }}>
-                                {props?.map(d => (
-                                    <Card key={d.label} variant="outlined" sx={{ bgcolor: "#222", borderColor: "#333", borderTop: `2px solid ${kindColor}` }}>
-                                        <CardContent sx={{ p: 2.5, pb: "20px !important" }}>
-                                            <Typography variant="caption" sx={{ color: "#777", letterSpacing: 1.2, fontSize: 9, textTransform: "uppercase" }} display="block" gutterBottom>{d.label}</Typography>
-                                            <Typography variant="body1" sx={{ fontFamily: '"JetBrains Mono", monospace', wordBreak: "break-all", fontSize: "0.95rem", fontWeight: 500 }}>{d.value}</Typography>
-                                        </CardContent>
-                                    </Card>
-                                ))}
-                              </Box>
+                              <Typography sx={{ color: "#666", fontSize: 11, fontWeight: 600, letterSpacing: 1.5, textTransform: "uppercase", mt: 3, mb: 0.5 }}>{section}</Typography>
+                              <Divider sx={{ borderColor: "#333", mb: 0.5 }} />
+                              {props?.map(d => {
+                                const rowIdx = globalIdx++;
+                                return (
+                                  <Box key={d.label} sx={{ display: "grid", gridTemplateColumns: "180px 1fr", py: 0.8, px: 2, bgcolor: rowIdx % 2 === 0 ? "transparent" : "rgba(255,255,255,0.02)" }}>
+                                      <Typography sx={{ color: "#777", fontSize: 12, textTransform: "uppercase", alignSelf: "center" }}>{d.label}</Typography>
+                                      <Typography sx={{ fontFamily: '"JetBrains Mono", monospace', fontSize: 13, color: "#ccc", wordBreak: "break-all", alignSelf: "center" }}>{d.value}</Typography>
+                                  </Box>
+                                );
+                              })}
                             </Box>
                           ));
                         })()}
