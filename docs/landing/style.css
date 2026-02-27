@@ -10,6 +10,7 @@
   --accent-blue: #569cd6;
   --accent-orange: #ce9178;
   --accent-yellow: #dcdcaa;
+  --accent-purple: #c586c0;
 }
 
 * {
@@ -108,6 +109,46 @@ a:hover {
   border: 1px solid var(--border);
 }
 
+/* Screenshots */
+.screenshots {
+  padding: 80px 20px;
+  max-width: 1100px;
+  margin: 0 auto;
+}
+
+.screenshots h2 {
+  text-align: center;
+  font-size: 32px;
+  color: #ffffff;
+  margin-bottom: 40px;
+}
+
+.screenshot-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(400px, 1fr));
+  gap: 32px;
+}
+
+.screenshot-card {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.screenshot-card img {
+  width: 100%;
+  display: block;
+  border-bottom: 1px solid var(--border);
+}
+
+.screenshot-card p {
+  padding: 16px;
+  font-size: 14px;
+  color: var(--text-secondary);
+  text-align: center;
+}
+
 /* Features */
 .features {
   padding: 80px 20px;
@@ -152,7 +193,15 @@ a:hover {
 }
 
 .feature-card:nth-child(4) {
+  border-top-color: var(--accent-purple);
+}
+
+.feature-card:nth-child(5) {
   border-top-color: var(--accent-yellow);
+}
+
+.feature-card:nth-child(6) {
+  border-top-color: var(--accent-blue);
 }
 
 .feature-card h3 {
@@ -164,6 +213,75 @@ a:hover {
 .feature-card p {
   font-size: 14px;
   color: var(--text-secondary);
+}
+
+/* Architecture */
+.architecture {
+  padding: 80px 20px;
+  max-width: 1100px;
+  margin: 0 auto;
+  border-top: 1px solid var(--border);
+}
+
+.architecture h2 {
+  text-align: center;
+  font-size: 32px;
+  color: #ffffff;
+  margin-bottom: 12px;
+}
+
+.architecture .subtitle {
+  text-align: center;
+  color: var(--text-secondary);
+  margin-bottom: 48px;
+  font-size: 16px;
+}
+
+.arch-columns {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+  gap: 32px;
+}
+
+.arch-card {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 28px 24px;
+}
+
+.arch-card h3 {
+  font-size: 18px;
+  color: #ffffff;
+  margin-bottom: 16px;
+  border-bottom: 2px solid var(--accent-teal);
+  padding-bottom: 8px;
+}
+
+.arch-card:nth-child(2) h3 {
+  border-bottom-color: var(--accent-blue);
+}
+
+.arch-card ul {
+  list-style: none;
+  padding: 0;
+}
+
+.arch-card li {
+  font-size: 14px;
+  color: var(--text-secondary);
+  padding: 6px 0;
+  border-bottom: 1px solid #333;
+}
+
+.arch-card li:last-child {
+  border-bottom: none;
+}
+
+.arch-card code {
+  color: var(--accent-teal);
+  font-family: "JetBrains Mono", "Cascadia Code", "Fira Code", monospace;
+  font-size: 13px;
 }
 
 /* Tech Stack */
@@ -232,7 +350,12 @@ a:hover {
   .hero .tagline {
     font-size: 16px;
   }
-  .features h2 {
+  .features h2,
+  .screenshots h2,
+  .architecture h2 {
     font-size: 24px;
+  }
+  .screenshot-grid {
+    grid-template-columns: 1fr;
   }
 }

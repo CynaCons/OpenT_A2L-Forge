@@ -26,6 +26,21 @@
     </div>
   </section>
 
+  <!-- Screenshots -->
+  <section class="screenshots">
+    <h2>See It in Action</h2>
+    <div class="screenshot-grid">
+      <div class="screenshot-card">
+        <img src="https://raw.githubusercontent.com/CynaCons/OpenT_A2L-Forge/master/docs/screenshots/a2l-view.png" alt="A2L Entity Browser" loading="lazy">
+        <p>Browse and edit A2L entities with a VS Code-inspired interface</p>
+      </div>
+      <div class="screenshot-card">
+        <img src="https://raw.githubusercontent.com/CynaCons/OpenT_A2L-Forge/master/docs/screenshots/create-entity.png" alt="Create Entity Dialog" loading="lazy">
+        <p>Create Measurements, Characteristics, CompuMethods, and more</p>
+      </div>
+    </div>
+  </section>
+
   <!-- Features -->
   <section class="features">
     <h2>Features</h2>
@@ -40,12 +55,47 @@
         <p>Import symbols from ELF binaries with DWARF debug info. Smart type inference, struct member expansion, and array support.</p>
       </div>
       <div class="feature-card">
+        <h3>Manual Entity Creation</h3>
+        <p>Create all 6 major A2L entity types directly from the UI: Measurements, Characteristics, AxisPts, CompuMethods, CompuVtabs, and RecordLayouts.</p>
+      </div>
+      <div class="feature-card">
+        <h3>A2L Validator</h3>
+        <p>Built-in validation engine with 9 rules: cross-reference checks, duplicate name detection, limit inversion warnings, and address validation.</p>
+      </div>
+      <div class="feature-card">
         <h3>Conflict Resolution</h3>
         <p>Detect and resolve symbol conflicts during import. Preview changes before applying, with skip, replace, and batch options.</p>
       </div>
       <div class="feature-card">
         <h3>Live ELF Watching</h3>
         <p>Automatically detect ELF file changes and update ECU addresses. Stay in sync with your build system without manual re-imports.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- Architecture -->
+  <section class="architecture">
+    <h2>Modular Architecture</h2>
+    <p class="subtitle">Clean separation of concerns across frontend and backend</p>
+    <div class="arch-columns">
+      <div class="arch-card">
+        <h3>Rust Backend</h3>
+        <ul>
+          <li><code>lib.rs</code> — Tauri wrappers + AppState</li>
+          <li><code>types.rs</code> — Shared types and traits</li>
+          <li><code>a2l_ops.rs</code> — A2L CRUD + tree building</li>
+          <li><code>elf_parser.rs</code> — ELF/DWARF parsing</li>
+          <li><code>validator.rs</code> — A2L validation engine</li>
+        </ul>
+      </div>
+      <div class="arch-card">
+        <h3>React Frontend</h3>
+        <ul>
+          <li>Layout: TitleBar, MenuBar, ActivityBar, StatusBar</li>
+          <li>Panels: Explorer, ELF Inspector, Entity Detail, Settings</li>
+          <li>Dialogs: Create, Delete, Conflict, Preview, Unsaved</li>
+          <li>Editors: Measurement, Characteristic, AxisPts, CompuMethod, CompuVtab, RecordLayout</li>
+        </ul>
       </div>
     </div>
   </section>
@@ -61,6 +111,7 @@
         <span class="tech-pill">TypeScript</span>
         <span class="tech-pill">Material UI</span>
         <span class="tech-pill">DWARF / gimli</span>
+        <span class="tech-pill">Playwright</span>
       </div>
     </div>
   </section>

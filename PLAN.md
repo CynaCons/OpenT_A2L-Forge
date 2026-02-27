@@ -384,6 +384,19 @@
   - [x] .github/workflows/gh-pages.yml — deploy on push to master
 - [x] Smoke test: tsc --noEmit clean, Vite dev server starts without errors
 
+## Iteration 5.0 — Architecture Refactor: CRUD, Validator & Module Split
+- [x] Phase A: Rust Module Split — split lib.rs (2,885 lines) into types.rs, elf_parser.rs, a2l_ops.rs, validator.rs; lib.rs now ~620 lines
+- [x] Phase B: A2L Validator — 9 validation rules, 8 integration tests, all 29 tests pass
+- [x] Phase C: Manual Entity Creation Backend — 6 core_create_* functions, 5 integration tests, all 34 tests pass
+- [x] Phase D: Frontend Refactor — App.tsx split from 2,068 to 967 lines; 15 new component files created
+- [x] Phase E: Create Entity UI — CreateEntityDialog with 6 entity types, CompuMethodEditor, CompuVtabEditor, RecordLayoutEditor
+- [x] Phase F: Documentation — Rustdoc on all pub items, SRS-R16 through SRS-R19, SRS-INDEX updated
+  - [x] SRS-R16-Module-Split.md — Rust backend module split documentation
+  - [x] SRS-R17-A2L-Validator.md — A2L validation engine documentation
+  - [x] SRS-R18-Manual-Entity-Creation.md — Manual entity creation documentation
+  - [x] SRS-R19-Frontend-Refactor.md — Frontend component split documentation
+  - [x] SRS-INDEX.md updated with R16-R19 entries
+
 ## Iteration 4.97 — A2L Detail View: Clean Table Layout Rework
 - [x] Replaced Card-based entity detail header with compact Box layout (h5, bottom border, inline description)
 - [x] Removed separate Description Card — folded into header as italic secondary text

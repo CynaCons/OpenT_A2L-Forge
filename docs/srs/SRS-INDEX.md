@@ -1,7 +1,7 @@
 # SRS Document Index
 
 **Project:** OpenT A2L Forge
-**Last Updated:** 2026-02-19
+**Last Updated:** 2026-02-27
 
 ## Requirements
 
@@ -21,3 +21,7 @@
 | R13 | [CHARACTERISTIC Import from ELF](SRS-R13-Characteristic-Import.md) | Implemented | High |
 | R14 | [Enum COMPU_METHOD Derivation](SRS-R14-Enum-CompuMethod.md) | Implemented | Medium |
 | R15 | [Entity List Performance](SRS-R15-Entity-List-Performance.md) | Implemented | Medium |
+| R16 | [Rust Backend Module Split](SRS-R16-Module-Split.md) | Implemented | Medium |
+| R17 | [A2L Validation Engine](SRS-R17-A2L-Validator.md) | Implemented | High |
+| R18 | [Manual Entity Creation](SRS-R18-Manual-Entity-Creation.md) | Implemented | High |
+| R19 | [Frontend Component Split](SRS-R19-Frontend-Refactor.md) | Implemented | Medium |

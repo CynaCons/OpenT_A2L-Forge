@@ -1,9 +1,13 @@
 use a2lfile::A2lObjectName;
 use opent_a2l_forge_lib::{
-    core_check_conflicts, core_create_characteristics, core_create_measurements,
+    core_check_conflicts, core_create_axis_pts_manual, core_create_characteristic_manual,
+    core_create_characteristics, core_create_compu_method, core_create_compu_vtab,
+    core_create_measurement_manual, core_create_measurements, core_create_record_layout,
     core_delete_entities, core_export_a2l, core_load_a2l_from_path,
     core_load_a2l_from_string, core_load_elf_symbols, core_update_ecu_addresses,
-    parse_dwarf_symbols, DeleteEntityRequest, SymbolWithMapping,
+    core_validate_a2l, parse_dwarf_symbols, AxisPtsData, CharacteristicData,
+    CompuMethodData, CompuVtabData, DeleteEntityRequest, MeasurementData, RecordLayoutData,
+    SymbolWithMapping, ValidationSeverity,
 };
 
 fn fixtures_dir() -> String {
@@ -1095,4 +1099,342 @@ fn test_volatile_array_symbols_get_correct_type_and_dim() {
         "Measurement_Matrix element should be UBYTE, got {}", matrix.suggested_a2l_type);
     println!("\nMeasurement_Matrix: a2l_type={} array_dims={:?} dwarf_type={:?}",
         matrix.suggested_a2l_type, matrix.array_dims, matrix.dwarf_type);
+}
+
+// ─── Validator tests ────────────────────────────────────────────────────────
+
+#[test]
+fn test_validate_empty_a2l_no_issues() {
+    let a2l_text = r#"ASAP2_VERSION 1 71
+/begin PROJECT test_proj ""
+  /begin MODULE test_mod ""
+  /end MODULE
+/end PROJECT"#;
+    let (a2l, _) = core_load_a2l_from_string(a2l_text).unwrap();
+    let result = core_validate_a2l(&a2l);
+    assert_eq!(result.error_count, 0);
+    assert_eq!(result.warning_count, 0);
+    println!("Empty A2L validation: {} issues", result.issues.len());
+}
+
+#[test]
+fn test_validate_broken_compu_method_xref() {
+    let a2l_text = r#"ASAP2_VERSION 1 71
+/begin PROJECT test_proj ""
+  /begin MODULE test_mod ""
+    /begin MEASUREMENT broken_meas "" UBYTE NONEXISTENT_CM 1 0.0 0.0 255.0
+    /end MEASUREMENT
+  /end MODULE
+/end PROJECT"#;
+    let (a2l, _) = core_load_a2l_from_string(a2l_text).unwrap();
+    let result = core_validate_a2l(&a2l);
+
+    let xref_issues: Vec<_> = result
+        .issues
+        .iter()
+        .filter(|i| i.rule == "XREF_COMPU_METHOD")
+        .collect();
+    assert_eq!(xref_issues.len(), 1, "Should find 1 broken compu method ref");
+    assert_eq!(xref_issues[0].severity, ValidationSeverity::Error);
+    assert_eq!(xref_issues[0].entity_name, "broken_meas");
+    println!("Broken COMPU_METHOD xref test passed: {}", xref_issues[0].message);
+}
+
+#[test]
+fn test_validate_no_compu_method_is_valid() {
+    let a2l_text = r#"ASAP2_VERSION 1 71
+/begin PROJECT test_proj ""
+  /begin MODULE test_mod ""
+    /begin MEASUREMENT valid_meas "" UBYTE NO_COMPU_METHOD 1 0.0 0.0 255.0
+    /end MEASUREMENT
+  /end MODULE
+/end PROJECT"#;
+    let (a2l, _) = core_load_a2l_from_string(a2l_text).unwrap();
+    let result = core_validate_a2l(&a2l);
+
+    let xref_issues: Vec<_> = result
+        .issues
+        .iter()
+        .filter(|i| i.rule == "XREF_COMPU_METHOD" && i.entity_name == "valid_meas")
+        .collect();
+    assert_eq!(xref_issues.len(), 0, "NO_COMPU_METHOD should not trigger error");
+}
+
+#[test]
+fn test_validate_limit_inversion() {
+    let a2l_text = r#"ASAP2_VERSION 1 71
+/begin PROJECT test_proj ""
+  /begin MODULE test_mod ""
+    /begin MEASUREMENT inverted_meas "" UBYTE NO_COMPU_METHOD 1 0.0 100.0 50.0
+    /end MEASUREMENT
+  /end MODULE
+/end PROJECT"#;
+    let (a2l, _) = core_load_a2l_from_string(a2l_text).unwrap();
+    let result = core_validate_a2l(&a2l);
+
+    let limit_issues: Vec<_> = result
+        .issues
+        .iter()
+        .filter(|i| i.rule == "LIMIT_INVERSION")
+        .collect();
+    assert_eq!(limit_issues.len(), 1, "Should find 1 limit inversion");
+    assert_eq!(limit_issues[0].severity, ValidationSeverity::Warning);
+    println!("Limit inversion test passed: {}", limit_issues[0].message);
+}
+
+#[test]
+fn test_validate_real_a2l_file() {
+    let (a2l, _) = core_load_a2l_from_path(&a2l_path("software_b.a2l")).unwrap();
+    let result = core_validate_a2l(&a2l);
+
+    println!(
+        "software_b.a2l validation: {} errors, {} warnings, {} info ({} total)",
+        result.error_count, result.warning_count, result.info_count, result.issues.len()
+    );
+
+    // Print first 10 issues for insight
+    for (i, issue) in result.issues.iter().take(10).enumerate() {
+        println!(
+            "  [{}] {:?} {} {} — {} ({})",
+            i, issue.severity, issue.entity_kind, issue.entity_name, issue.message, issue.rule
+        );
+    }
+}
+
+#[test]
+fn test_validate_addr_zero_warning() {
+    // Create A2L with characteristic at address 0
+    let a2l_text = r#"ASAP2_VERSION 1 71
+/begin PROJECT test_proj ""
+  /begin MODULE test_mod ""
+    /begin RECORD_LAYOUT __val_UBYTE
+      FNC_VALUES 1 UBYTE COLUMN_DIR DIRECT
+    /end RECORD_LAYOUT
+    /begin CHARACTERISTIC zero_char "" VALUE 0x0 __val_UBYTE 0.0 NO_COMPU_METHOD 0.0 255.0
+    /end CHARACTERISTIC
+  /end MODULE
+/end PROJECT"#;
+    let (a2l, _) = core_load_a2l_from_string(a2l_text).unwrap();
+    let result = core_validate_a2l(&a2l);
+
+    let addr_issues: Vec<_> = result
+        .issues
+        .iter()
+        .filter(|i| i.rule == "ADDR_ZERO")
+        .collect();
+    assert_eq!(addr_issues.len(), 1, "Should find 1 ADDR_ZERO warning");
+    assert_eq!(addr_issues[0].severity, ValidationSeverity::Warning);
+}
+
+#[test]
+fn test_validate_broken_record_layout_xref() {
+    let a2l_text = r#"ASAP2_VERSION 1 71
+/begin PROJECT test_proj ""
+  /begin MODULE test_mod ""
+    /begin CHARACTERISTIC broken_char "" VALUE 0x1000 NONEXISTENT_RL 0.0 NO_COMPU_METHOD 0.0 255.0
+    /end CHARACTERISTIC
+  /end MODULE
+/end PROJECT"#;
+    let (a2l, _) = core_load_a2l_from_string(a2l_text).unwrap();
+    let result = core_validate_a2l(&a2l);
+
+    let rl_issues: Vec<_> = result
+        .issues
+        .iter()
+        .filter(|i| i.rule == "XREF_RECORD_LAYOUT")
+        .collect();
+    assert_eq!(rl_issues.len(), 1, "Should find 1 broken record layout ref");
+    assert_eq!(rl_issues[0].severity, ValidationSeverity::Error);
+    println!("Broken RECORD_LAYOUT xref test passed: {}", rl_issues[0].message);
+}
+
+#[test]
+fn test_validate_broken_compu_tab_xref() {
+    let a2l_text = r#"ASAP2_VERSION 1 71
+/begin PROJECT test_proj ""
+  /begin MODULE test_mod ""
+    /begin COMPU_METHOD broken_cm "" TAB_VERB "%d" ""
+      COMPU_TAB_REF NONEXISTENT_VTAB
+    /end COMPU_METHOD
+  /end MODULE
+/end PROJECT"#;
+    let (a2l, _) = core_load_a2l_from_string(a2l_text).unwrap();
+    let result = core_validate_a2l(&a2l);
+
+    let tab_issues: Vec<_> = result
+        .issues
+        .iter()
+        .filter(|i| i.rule == "XREF_COMPU_TAB")
+        .collect();
+    assert_eq!(tab_issues.len(), 1, "Should find 1 broken compu tab ref");
+    assert_eq!(tab_issues[0].severity, ValidationSeverity::Error);
+    println!("Broken COMPU_TAB xref test passed: {}", tab_issues[0].message);
+}
+
+// ─── Manual entity creation tests ───────────────────────────────────────────
+
+fn empty_a2l() -> a2lfile::A2lFile {
+    let a2l_text = r#"ASAP2_VERSION 1 71
+/begin PROJECT test_proj ""
+  /begin MODULE test_mod ""
+  /end MODULE
+/end PROJECT"#;
+    core_load_a2l_from_string(a2l_text).unwrap().0
+}
+
+#[test]
+fn test_create_measurement_manual() {
+    let mut a2l = empty_a2l();
+
+    let data = MeasurementData {
+        name: "manual_meas".to_string(),
+        long_identifier: "Manual measurement".to_string(),
+        datatype: "UWORD".to_string(),
+        conversion: "NO_COMPU_METHOD".to_string(),
+        resolution: 1.0,
+        accuracy: 0.0,
+        lower_limit: 0.0,
+        upper_limit: 65535.0,
+        ecu_address: Some("0x1000".to_string()),
+    };
+
+    core_create_measurement_manual(&mut a2l, None, &data).unwrap();
+
+    let module = &a2l.project.module[0];
+    assert_eq!(module.measurement.len(), 1);
+    let m = &module.measurement[0];
+    assert_eq!(m.get_name(), "manual_meas");
+    assert_eq!(m.long_identifier, "Manual measurement");
+    assert_eq!(m.ecu_address.as_ref().unwrap().address, 0x1000);
+
+    // Reject duplicate
+    let result = core_create_measurement_manual(&mut a2l, None, &data);
+    assert!(result.is_err(), "Should reject duplicate name");
+    assert!(result.unwrap_err().contains("already exists"));
+}
+
+#[test]
+fn test_create_characteristic_manual() {
+    let mut a2l = empty_a2l();
+
+    // First create a record layout
+    let rl_data = RecordLayoutData {
+        name: "__val_UBYTE".to_string(),
+        fnc_values_datatype: Some("UBYTE".to_string()),
+    };
+    core_create_record_layout(&mut a2l, None, &rl_data).unwrap();
+
+    let data = CharacteristicData {
+        name: "manual_char".to_string(),
+        long_identifier: "Manual characteristic".to_string(),
+        characteristic_type: "VALUE".to_string(),
+        address: "0x2000".to_string(),
+        deposit: "__val_UBYTE".to_string(),
+        max_diff: 0.0,
+        conversion: "NO_COMPU_METHOD".to_string(),
+        lower_limit: 0.0,
+        upper_limit: 255.0,
+        bit_mask: None,
+    };
+
+    core_create_characteristic_manual(&mut a2l, None, &data).unwrap();
+
+    let module = &a2l.project.module[0];
+    assert_eq!(module.characteristic.len(), 1);
+    let c = &module.characteristic[0];
+    assert_eq!(c.get_name(), "manual_char");
+    assert_eq!(c.address, 0x2000);
+
+    // Reject duplicate
+    let result = core_create_characteristic_manual(&mut a2l, None, &data);
+    assert!(result.is_err());
+}
+
+#[test]
+fn test_create_axis_pts_manual() {
+    let mut a2l = empty_a2l();
+
+    let data = AxisPtsData {
+        name: "manual_axis".to_string(),
+        long_identifier: "Manual axis points".to_string(),
+        address: "0x3000".to_string(),
+        input_quantity: "NO_INPUT_QUANTITY".to_string(),
+        deposit_record: "some_layout".to_string(),
+        max_diff: 0.0,
+        conversion: "NO_COMPU_METHOD".to_string(),
+        max_axis_points: 10,
+        lower_limit: 0.0,
+        upper_limit: 100.0,
+    };
+
+    core_create_axis_pts_manual(&mut a2l, None, &data).unwrap();
+
+    let module = &a2l.project.module[0];
+    assert_eq!(module.axis_pts.len(), 1);
+    assert_eq!(module.axis_pts[0].get_name(), "manual_axis");
+    assert_eq!(module.axis_pts[0].max_axis_points, 10);
+}
+
+#[test]
+fn test_create_compu_method_and_vtab() {
+    let mut a2l = empty_a2l();
+
+    // Create CompuVtab first
+    let vtab_data = CompuVtabData {
+        name: "my_vtab".to_string(),
+        long_identifier: "My value table".to_string(),
+        value_pairs: vec![
+            (0.0, "OFF".to_string()),
+            (1.0, "ON".to_string()),
+            (2.0, "ERROR".to_string()),
+        ],
+        default_value: Some("UNKNOWN".to_string()),
+    };
+    core_create_compu_vtab(&mut a2l, None, &vtab_data).unwrap();
+
+    // Create CompuMethod referencing it
+    let cm_data = CompuMethodData {
+        name: "my_cm".to_string(),
+        long_identifier: "My compu method".to_string(),
+        conversion_type: "TAB_VERB".to_string(),
+        format: "%d".to_string(),
+        unit: "".to_string(),
+        coeffs: None,
+        compu_tab_ref: Some("my_vtab".to_string()),
+    };
+    core_create_compu_method(&mut a2l, None, &cm_data).unwrap();
+
+    let module = &a2l.project.module[0];
+    assert_eq!(module.compu_vtab.len(), 1);
+    assert_eq!(module.compu_vtab[0].value_pairs.len(), 3);
+    assert_eq!(module.compu_method.len(), 1);
+    assert!(module.compu_method[0].compu_tab_ref.is_some());
+
+    // Validate — should pass since vtab exists
+    let result = core_validate_a2l(&a2l);
+    let tab_issues: Vec<_> = result.issues.iter().filter(|i| i.rule == "XREF_COMPU_TAB").collect();
+    assert_eq!(tab_issues.len(), 0, "No broken compu tab refs expected");
+
+    // Reject duplicates
+    assert!(core_create_compu_method(&mut a2l, None, &cm_data).is_err());
+    assert!(core_create_compu_vtab(&mut a2l, None, &vtab_data).is_err());
+}
+
+#[test]
+fn test_create_record_layout() {
+    let mut a2l = empty_a2l();
+
+    let data = RecordLayoutData {
+        name: "my_layout".to_string(),
+        fnc_values_datatype: Some("FLOAT32_IEEE".to_string()),
+    };
+    core_create_record_layout(&mut a2l, None, &data).unwrap();
+
+    let module = &a2l.project.module[0];
+    assert_eq!(module.record_layout.len(), 1);
+    assert_eq!(module.record_layout[0].get_name(), "my_layout");
+    assert!(module.record_layout[0].fnc_values.is_some());
+
+    // Reject duplicate
+    assert!(core_create_record_layout(&mut a2l, None, &data).is_err());
 }

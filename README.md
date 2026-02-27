@@ -31,6 +31,12 @@ Select symbols from an ELF binary and import them into your A2L project as Measu
 
 ![Import View](docs/screenshots/import-view.png)
 
+### Create Entity Dialog
+
+Manually create Measurements, Characteristics, AxisPts, CompuMethods, CompuVtabs, and RecordLayouts with structured forms.
+
+![Create Entity](docs/screenshots/create-entity.png)
+
 ---
 
 ## Features
@@ -41,6 +47,19 @@ Select symbols from an ELF binary and import them into your A2L project as Measu
 - **Open and parse** existing A2L files (ASAP2 v1.71)
 - **Save and export** with format preservation
 - **Recent files** list with quick access from sidebar and File menu
+
+### Manual Entity Creation
+
+Create all major A2L entity types directly from the UI:
+
+| Entity | Create Form Fields |
+|--------|-------------------|
+| **MEASUREMENT** | Name, Data Type, Long Identifier, Lower/Upper Limit, Conversion |
+| **CHARACTERISTIC** | Name, Type (VALUE/CURVE/MAP/...), Address, Deposit, Lower/Upper Limit, Conversion |
+| **AXIS_PTS** | Name, Address, Deposit Record, Max Axis Points, Lower/Upper Limit, Conversion |
+| **COMPU_METHOD** | Name, Conversion Type (IDENTICAL/LINEAR/RAT_FUNC/TAB_VERB/TAB_NOVERB), Format, Unit, Coefficients |
+| **COMPU_VTAB** | Name, Long Identifier, Value-String Pairs, Default Value |
+| **RECORD_LAYOUT** | Name, FNC Values Datatype |
 
 ### A2L Entity Editing
 
@@ -54,6 +73,22 @@ Select symbols from an ELF binary and import them into your A2L project as Measu
 | **COMPU_METHOD** | Auto-generated for enum types (TAB_VERB) |
 | **COMPU_VTAB** | Auto-generated from DWARF enumerator values |
 | **RECORD_LAYOUT** | Auto-created with FNC_VALUES for Characteristic import |
+
+### A2L Validator (Backend)
+
+Built-in validation engine with cross-reference checks:
+
+| Rule | Severity | Check |
+|------|----------|-------|
+| `XREF_COMPU_METHOD` | Error | Conversion references existing CompuMethod |
+| `XREF_RECORD_LAYOUT` | Error | Deposit references existing RecordLayout |
+| `XREF_COMPU_TAB` | Error | CompuMethod tab ref references existing CompuVtab |
+| `XREF_INPUT_QUANTITY` | Warning | Input quantity references existing Measurement |
+| `DUP_NAME` | Error | Duplicate entity names within a module |
+| `LIMIT_INVERSION` | Warning | Lower limit exceeds upper limit |
+| `EMPTY_NAME` | Error | Entity has empty name |
+| `ADDR_ZERO` | Warning | Address is 0x0 |
+| `ADDR_OVERFLOW` | Warning | Address exceeds 32-bit range |
 
 ### A2L Data Types
 
@@ -72,7 +107,7 @@ Supports all standard ASAP2 data types:
 
 ### DWARF Debug Info
 
-- **DWARF v2–v5** support (including DWARF5 `DW_FORM_strx` string resolution via `.debug_str_offsets`)
+- **DWARF v2-v5** support (including DWARF5 `DW_FORM_strx` string resolution via `.debug_str_offsets`)
 - **Type resolution** through `typedef`, `const`, `volatile`, and `restrict` qualifier chains
 - **Struct member expansion**: variables of struct type are expanded into individual member symbols with computed offsets
 - **Array support**: `DW_TAG_array_type` + `DW_TAG_subrange_type` parsing for element type and count, displayed as `type[N]`
@@ -84,7 +119,7 @@ Supports all standard ASAP2 data types:
 ### ELF-to-A2L Import
 
 - **Import as MEASUREMENT** or **CHARACTERISTIC** (VALUE for scalars, VAL_BLK for arrays)
-- **Smart data type inference** from symbol size (1B → UBYTE, 2B → UWORD, 4B → FLOAT32_IEEE, etc.)
+- **Smart data type inference** from symbol size (1B -> UBYTE, 2B -> UWORD, 4B -> FLOAT32_IEEE, etc.)
 - **DWARF-aware type inference** for struct members using debug info
 - **MATRIX_DIM** auto-set for array symbols
 - **Conflict detection** checking both existing Measurements and Characteristics
@@ -108,7 +143,7 @@ Supports all standard ASAP2 data types:
 - **Search and filter** across all entities
 - **Keyboard shortcuts**: Ctrl+O (Open), Ctrl+S (Save), Ctrl+Shift+S (Save As), Ctrl+N (New), Escape (Cancel edit)
 - **File menu** with New, Open, Save, Save As, and Recent Files
-- **Unsaved changes protection** — confirmation dialog before close, open, or create when dirty
+- **Unsaved changes protection** -- confirmation dialog before close, open, or create when dirty
 - **Titlebar** shows filename and dirty indicator
 - **Status bar** with operation feedback, file info, and click-to-dismiss errors
 - **Lazy loading** for large entity lists (500 per batch, "Load more" / "Load all")
@@ -165,7 +200,7 @@ The release output is in `src-tauri/target/release/bundle/`.
 ### Running Tests
 
 ```bash
-# Rust integration tests (21 tests)
+# Rust integration tests (34 tests)
 cargo test --manifest-path src-tauri/Cargo.toml
 
 # Playwright E2E tests (requires release binary built first)
@@ -177,26 +212,58 @@ npx playwright test
 ## Project Structure
 
 ```
-src/App.tsx                          # Main frontend — all views, state, handlers
-src/components/editors/              # Entity editors (Measurement, Characteristic, AxisPts)
-src-tauri/src/lib.rs                 # Rust backend — core functions + Tauri command wrappers
-src-tauri/tests/integration.rs       # Rust integration tests using real fixture files
-tests/e2e/                           # Playwright E2E tests (real binary via CDP)
-external/a2ltool/fixtures/           # A2L and ELF fixture files
-docs/srs/                            # SRS requirement documents
-docs/landing/                        # GitHub Pages landing page
+src/
+  App.tsx                              # Main app shell — state, hooks, layout orchestration
+  types.ts                             # Shared TypeScript types
+  theme.ts                             # MUI theme, entity icons, colors
+  components/
+    layout/
+      TitleBar.tsx                     # Custom window titlebar
+      MenuBar.tsx                      # File menu dropdown
+      ActivityBar.tsx                  # Left icon strip (A2L/ELF/Settings tabs)
+      StatusBar.tsx                    # Status message bar
+    panels/
+      ExplorerPanel.tsx                # Tree view + search + sidebar buttons
+      ElfSidebarPanel.tsx              # ELF Inspector sidebar
+      ElfMainPanel.tsx                 # ELF symbol table + filters
+      EntityDetailPanel.tsx            # Entity detail view + editor dispatch
+      SettingsPanel.tsx                # Settings view
+    dialogs/
+      CreateEntityDialog.tsx           # Create Entity dialog (all 6 types)
+      DeleteDialog.tsx                 # Bulk delete confirmation
+      ConflictDialog.tsx               # Import conflict resolution
+      PreviewDialog.tsx                # Batch import preview
+      UnsavedDialog.tsx                # Unsaved changes warning
+    editors/
+      MeasurementEditor.tsx            # Measurement field editor
+      CharacteristicEditor.tsx         # Characteristic field editor
+      AxisPtsEditor.tsx                # AxisPts field editor
+      CompuMethodEditor.tsx            # CompuMethod create form
+      CompuVtabEditor.tsx              # CompuVtab create form
+      RecordLayoutEditor.tsx           # RecordLayout create form
+src-tauri/src/
+  lib.rs                               # Tauri command wrappers + AppState
+  types.rs                             # Shared Rust types and traits
+  a2l_ops.rs                           # A2L CRUD operations + tree building
+  elf_parser.rs                        # ELF/DWARF parsing + type inference
+  validator.rs                         # A2L validation engine
+src-tauri/tests/integration.rs         # Rust integration tests (34 tests)
+tests/e2e/                             # Playwright E2E tests (real binary via CDP)
+external/a2ltool/fixtures/             # A2L and ELF fixture files
+docs/srs/                              # SRS requirement documents
+docs/landing/                          # GitHub Pages landing page
 ```
 
 ---
 
 ## Roadmap
 
-- **Visual improvements** — refined theme, custom icons, improved layout responsiveness
-- **Broader A2L coverage** — support for more ASAP2 elements, corner cases, and version-specific features
-- **Broader ELF/DWARF coverage** — additional architectures, DWARF edge cases, and symbol types
-- **CLI interface** — command-line tools for batch A2L operations, ELF import, and scripted workflows
-- **A2L Validator** — comprehensive validation engine with cross-reference checks and pre-export reports
-- **Better A2L editing interface** — inline editing, drag-and-drop, undo/redo, and autosave
+- **Visual improvements** -- refined theme, custom icons, improved layout responsiveness
+- **Validator UI** -- frontend panel for A2L validation results with click-to-navigate
+- **Broader A2L coverage** -- support for more ASAP2 elements, corner cases, and version-specific features
+- **Broader ELF/DWARF coverage** -- additional architectures, DWARF edge cases, and symbol types
+- **CLI interface** -- command-line tools for batch A2L operations, ELF import, and scripted workflows
+- **Better A2L editing interface** -- inline editing, drag-and-drop, undo/redo, and autosave
 
 ---
 
