@@ -37,6 +37,12 @@ Manually create Measurements, Characteristics, AxisPts, CompuMethods, CompuVtabs
 
 ![Create Entity](docs/screenshots/create-entity.png)
 
+### Entity Editor
+
+Edit entity properties with structured forms featuring section grouping, validation, and data type selectors.
+
+![Edit Entity](docs/screenshots/edit-entity.png)
+
 ---
 
 ## Features
