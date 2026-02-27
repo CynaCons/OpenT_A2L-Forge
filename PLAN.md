@@ -406,3 +406,12 @@
 - [x] Removed unused Card/CardContent MUI imports
 - [x] All data-testid attributes preserved (entity-detail, btn-edit)
 - [x] Smoke test: tsc --noEmit clean, Vite dev server starts without errors
+
+## Iteration 5.1 — Production Deployment & Documentation
+- [x] Updated README.md — new project structure, manual entity creation section, validator section, 34 tests, updated roadmap
+- [x] New screenshot: create-entity.png showing Create Entity dialog with Measurement form
+- [x] Retook all screenshots (a2l-view, elf-view, import-view) at current app state
+- [x] Updated landing page — screenshots section, architecture section, 6 feature cards, Playwright tech pill
+- [x] Updated landing page CSS — screenshot grid, architecture columns, responsive, 6-card feature grid
+- [x] Screenshot test: tests/e2e/take-screenshots.spec.ts for automated screenshot capture
+- [x] Committed and pushed to origin/master — GitHub Pages deployment triggered
