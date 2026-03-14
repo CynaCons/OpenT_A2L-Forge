@@ -1,13 +1,12 @@
 use a2lfile::A2lObjectName;
 use opent_a2l_forge_lib::{
-    core_check_conflicts, core_create_axis_pts_manual, core_create_characteristic_manual,
-    core_create_characteristics, core_create_compu_method, core_create_compu_vtab,
-    core_create_measurement_manual, core_create_measurements, core_create_record_layout,
-    core_delete_entities, core_export_a2l, core_load_a2l_from_path,
-    core_load_a2l_from_string, core_load_elf_symbols, core_update_ecu_addresses,
-    core_validate_a2l, parse_dwarf_symbols, AxisPtsData, CharacteristicData,
-    CompuMethodData, CompuVtabData, DeleteEntityRequest, MeasurementData, RecordLayoutData,
-    SymbolWithMapping, ValidationSeverity,
+    build_tree, core_check_conflicts, core_create_axis_pts_manual,
+    core_create_characteristic_manual, core_create_characteristics, core_create_compu_method,
+    core_create_compu_vtab, core_create_measurement_manual, core_create_measurements,
+    core_create_record_layout, core_delete_entities, core_export_a2l, core_load_a2l_from_path,
+    core_load_a2l_from_string, core_load_elf_symbols, core_update_ecu_addresses, core_validate_a2l,
+    parse_dwarf_symbols, AxisPtsData, CharacteristicData, CompuMethodData, CompuVtabData,
+    DeleteEntityRequest, MeasurementData, RecordLayoutData, SymbolWithMapping, ValidationSeverity,
 };
 
 fn fixtures_dir() -> String {
@@ -35,7 +34,10 @@ fn test_load_real_a2l_software_b() {
         warnings.len()
     );
 
-    assert!(!a2l.project.name.is_empty(), "Project name should not be empty");
+    assert!(
+        !a2l.project.name.is_empty(),
+        "Project name should not be empty"
+    );
     assert!(
         !a2l.project.module.is_empty(),
         "Should have at least one module"
@@ -43,8 +45,105 @@ fn test_load_real_a2l_software_b() {
 
     let module = &a2l.project.module[0];
     let measurement_count = module.measurement.len();
-    println!("  Module '{}': {} measurements", module.get_name(), measurement_count);
-    assert!(measurement_count > 0, "software_b.a2l should contain measurements");
+    println!(
+        "  Module '{}': {} measurements",
+        module.get_name(),
+        measurement_count
+    );
+    assert!(
+        measurement_count > 0,
+        "software_b.a2l should contain measurements"
+    );
+}
+
+#[test]
+fn test_nested_a2l_fixture_builds_tree_and_exports() {
+    let (a2l, warnings) = core_load_a2l_from_path(&a2l_path("from_source_structs.a2l")).unwrap();
+    println!(
+        "from_source_structs.a2l: project={}, modules={}, warnings={}",
+        a2l.project.name,
+        a2l.project.module.len(),
+        warnings.len()
+    );
+
+    let tree = build_tree(&a2l);
+    assert_eq!(
+        tree.modules.len(),
+        1,
+        "Expected a single module in the nested fixture"
+    );
+
+    let module = &tree.modules[0];
+    let typedef_section = module
+        .sections
+        .iter()
+        .find(|section| section.title == "Typedef Structure")
+        .expect("Typedef Structure section should exist");
+    assert!(
+        typedef_section
+            .items
+            .iter()
+            .any(|item| item.name == "Thing"),
+        "Nested typedef fixture should include Thing"
+    );
+    assert!(
+        typedef_section
+            .items
+            .iter()
+            .any(|item| item.name == "parameters"),
+        "Nested typedef fixture should include parameters"
+    );
+    assert!(
+        typedef_section
+            .items
+            .iter()
+            .any(|item| item.name == "measurements.Circle"),
+        "Nested typedef fixture should include nested structure entries"
+    );
+
+    let parameters = typedef_section
+        .items
+        .iter()
+        .find(|item| item.name == "parameters")
+        .unwrap();
+    assert!(
+        parameters
+            .details
+            .iter()
+            .any(|detail| detail.label == "Structure components" && detail.value == "5"),
+        "parameters typedef should report 5 structure components"
+    );
+
+    let instance_section = module
+        .sections
+        .iter()
+        .find(|section| section.title == "Instances")
+        .expect("Instances section should exist");
+    let shapes = instance_section
+        .items
+        .iter()
+        .find(|item| item.name == "shapes_a2l")
+        .expect("shapes_a2l instance should exist");
+    assert!(
+        shapes
+            .details
+            .iter()
+            .any(|detail| detail.label == "Type ref" && detail.value == "measurements"),
+        "shapes_a2l should retain its nested typedef reference"
+    );
+    assert!(
+        shapes
+            .details
+            .iter()
+            .any(|detail| detail.label == "Overwrite entries" && detail.value == "2"),
+        "shapes_a2l should retain both overwrite entries"
+    );
+
+    let exported = core_export_a2l(&a2l);
+    assert!(exported.contains("/begin TYPEDEF_STRUCTURE parameters"));
+    assert!(exported.contains("Fork parameters.Fork"));
+    assert!(exported.contains("/begin INSTANCE shapes_a2l"));
+    assert!(exported.contains("/begin OVERWRITE Triangle.subelem 0"));
 }
 
 // ─── ELF loading tests ─────────────────────────────────────────────────────
@@ -58,7 +157,10 @@ fn test_load_real_elf_debugdata() {
 
     let with_address = symbols.iter().filter(|s| s.address > 0).count();
     println!("  {} symbols have address > 0", with_address);
-    assert!(with_address > 0, "At least some symbols should have addresses > 0");
+    assert!(
+        with_address > 0,
+        "At least some symbols should have addresses > 0"
+    );
 }
 
 #[test]
@@ -73,7 +175,10 @@ fn test_load_real_elf_update_test() {
 
     // Verify symbol data is reasonable
     for sym in symbols.iter().take(5) {
-        println!("  {} addr=0x{:X} size={} type={}", sym.name, sym.address, sym.size, sym.type_str);
+        println!(
+            "  {} addr=0x{:X} size={} type={}",
+            sym.name, sym.address, sym.size, sym.type_str
+        );
     }
 }
 
@@ -82,7 +187,11 @@ fn test_elf_dwarf_parsing_runs_without_error() {
     // Verify DWARF parsing runs without errors on ELF files with debug sections.
     // The actual type resolution depends on DW_TAG_variable names matching symbol names,
     // which may not happen for all fixtures. The key assertion is no panics/errors.
-    let candidates = ["debugdata_gcc.elf", "debugdata_clang.elf", "debugdata_gcc_dw3.elf"];
+    let candidates = [
+        "debugdata_gcc.elf",
+        "debugdata_clang.elf",
+        "debugdata_gcc_dw3.elf",
+    ];
 
     for name in &candidates {
         let symbols = core_load_elf_symbols(&elf_path(name)).unwrap();
@@ -97,6 +206,92 @@ fn test_elf_dwarf_parsing_runs_without_error() {
         );
         assert!(!symbols.is_empty(), "{} should have symbols", name);
     }
+}
+
+#[test]
+fn test_nested_struct_members_flatten_recursively() {
+    let fixture = elf_path("update_typedef_test.elf");
+    let symbols = core_load_elf_symbols(&fixture).unwrap();
+    let buffer = std::fs::read(&fixture).unwrap();
+    let dwarf_info = parse_dwarf_symbols(&buffer);
+
+    let struct_b = symbols
+        .iter()
+        .find(|s| s.name == "struct_b")
+        .expect("struct_b should exist as a top-level symbol");
+    let struct_b_info = dwarf_info
+        .get("struct_b")
+        .expect("struct_b should exist in DWARF info");
+
+    assert!(
+        struct_b_info.members.iter().any(|m| m.name == "s1.enumval"),
+        "Nested leaf s1.enumval should be flattened into DWARF members"
+    );
+    assert!(
+        struct_b_info.members.iter().any(|m| m.name == "s2.val_f32"),
+        "Nested leaf s2.val_f32 should be flattened into DWARF members"
+    );
+    assert!(
+        !struct_b_info.members.iter().any(|m| m.name == "s1"),
+        "Intermediate nested structs should not be emitted as importable leaves"
+    );
+    assert!(
+        !symbols.iter().any(|s| s.name == "struct_b.s1"),
+        "Intermediate nested symbols should not be emitted into the ELF symbol list"
+    );
+
+    let check_leaf = |relative_name: &str,
+                      expected_type: &str,
+                      expected_size: u64,
+                      expected_enum_values: Option<&[(&str, i64)]>| {
+        let member = struct_b_info
+            .members
+            .iter()
+            .find(|m| m.name == relative_name)
+            .unwrap_or_else(|| panic!("DWARF member '{relative_name}' should exist"));
+        let symbol_name = format!("struct_b.{relative_name}");
+        let symbol = symbols
+            .iter()
+            .find(|s| s.name == symbol_name)
+            .unwrap_or_else(|| panic!("ELF symbol '{symbol_name}' should exist"));
+
+        assert!(
+            symbol.is_struct_member,
+            "{symbol_name} should be marked as a struct member"
+        );
+        assert_eq!(
+            symbol.parent_struct.as_deref(),
+            Some("struct_b"),
+            "{symbol_name} should remain grouped under the top-level parent"
+        );
+        assert_eq!(
+            symbol.address,
+            struct_b.address + member.offset,
+            "Address should equal top-level base + flattened member offset"
+        );
+        assert_eq!(symbol.suggested_a2l_type, expected_type);
+        assert_eq!(symbol.size, expected_size);
+
+        if let Some(expected_enum_values) = expected_enum_values {
+            let expected: Vec<(String, i64)> = expected_enum_values
+                .iter()
+                .map(|(name, value)| ((*name).to_string(), *value))
+                .collect();
+            assert_eq!(
+                symbol.enum_values, expected,
+                "Enum variants should be preserved for nested enum leaves"
+            );
+        }
+    };
+
+    check_leaf(
+        "s1.enumval",
+        "UWORD",
+        2,
+        Some(&[("VALUE_1", 100), ("VALUE_2", 20), ("VALUE_3", 11111)]),
+    );
+    check_leaf("s1.val_i32", "ULONG", 4, None);
+    check_leaf("s2.val_f32", "FLOAT32_IEEE", 4, None);
 }
 
 // ─── Measurement creation tests ─────────────────────────────────────────────
@@ -154,19 +349,92 @@ fn test_create_measurements_from_real_elf() {
 
     // Verify names and addresses match
     for sym in &object_symbols {
-        let meas = module
-            .measurement
-            .iter()
-            .find(|m| m.get_name() == sym.name);
+        let meas = module.measurement.iter().find(|m| m.get_name() == sym.name);
         assert!(meas.is_some(), "Measurement '{}' should exist", sym.name);
         let meas = meas.unwrap();
-        let addr = meas.ecu_address.as_ref().map(|a| a.address as u64).unwrap_or(0);
+        let addr = meas
+            .ecu_address
+            .as_ref()
+            .map(|a| a.address as u64)
+            .unwrap_or(0);
         assert_eq!(
             addr, sym.address as u64,
             "Address mismatch for '{}'",
             sym.name
         );
     }
+}
+
+#[test]
+fn test_nested_struct_members_import_as_measurements() {
+    let a2l_text = r#"ASAP2_VERSION 1 71
+/begin PROJECT test_proj ""
+  /begin MODULE test_mod ""
+  /end MODULE
+/end PROJECT"#;
+
+    let (mut a2l, _) = core_load_a2l_from_string(a2l_text).unwrap();
+    let symbols = core_load_elf_symbols(&elf_path("update_typedef_test.elf")).unwrap();
+
+    let selected_names = ["struct_b.s1.val_i32", "struct_b.s2.val_f32"];
+    let mappings: Vec<SymbolWithMapping> = selected_names
+        .iter()
+        .map(|name| {
+            let symbol = symbols
+                .iter()
+                .find(|s| s.name == *name)
+                .unwrap_or_else(|| panic!("Nested symbol '{}' should exist", name));
+            SymbolWithMapping {
+                name: symbol.name.clone(),
+                address: symbol.address,
+                a2l_type: symbol.suggested_a2l_type.clone(),
+                lower_limit: symbol.suggested_limits.0,
+                upper_limit: symbol.suggested_limits.1,
+                conversion: None,
+                resolution: None,
+                accuracy: None,
+                array_dims: symbol.array_dims.clone(),
+                enum_values: symbol.enum_values.clone(),
+            }
+        })
+        .collect();
+
+    core_create_measurements(&mut a2l, None, &mappings).unwrap();
+
+    let module = &a2l.project.module[0];
+    assert_eq!(module.measurement.len(), 2);
+
+    let scalar = module
+        .measurement
+        .iter()
+        .find(|m| m.get_name() == "struct_b.s1.val_i32")
+        .expect("Nested integer measurement should exist");
+    assert_eq!(scalar.datatype.to_string().to_uppercase(), "ULONG");
+    assert_eq!(
+        scalar.ecu_address.as_ref().map(|addr| addr.address as u64),
+        Some(mappings[0].address)
+    );
+
+    let float_leaf = module
+        .measurement
+        .iter()
+        .find(|m| m.get_name() == "struct_b.s2.val_f32")
+        .expect("Nested float measurement should exist");
+    assert_eq!(
+        float_leaf.datatype.to_string().to_uppercase(),
+        "FLOAT32_IEEE"
+    );
+    assert_eq!(
+        float_leaf
+            .ecu_address
+            .as_ref()
+            .map(|addr| addr.address as u64),
+        Some(mappings[1].address)
+    );
+
+    let exported = core_export_a2l(&a2l);
+    assert!(exported.contains("/begin MEASUREMENT struct_b.s1.val_i32"));
+    assert!(exported.contains("/begin MEASUREMENT struct_b.s2.val_f32"));
 }
 
 #[test]
@@ -208,7 +476,11 @@ fn test_replace_duplicate_measurement() {
         .iter()
         .filter(|m| m.get_name() == "foo")
         .collect();
-    assert_eq!(foos.len(), 1, "Should have exactly 1 measurement named 'foo'");
+    assert_eq!(
+        foos.len(),
+        1,
+        "Should have exactly 1 measurement named 'foo'"
+    );
     let addr = foos[0].ecu_address.as_ref().map(|a| a.address).unwrap_or(0);
     assert_eq!(addr, 0x2000, "Should have the updated address");
 }
@@ -320,8 +592,7 @@ fn test_export_contains_imported_measurements() {
 
 #[test]
 fn test_voyant_elf_struct_members() {
-    let voyant_elf =
-        r"C:\dev\interview\voyant-photonics\VoyantTakeHomeAssignment\build\Debug\VoyantTakeHomeAssignment.elf";
+    let voyant_elf = r"C:\dev\interview\voyant-photonics\VoyantTakeHomeAssignment\build\Debug\VoyantTakeHomeAssignment.elf";
     if !std::path::Path::new(voyant_elf).exists() {
         println!("Skipping: Voyant ELF not found at {voyant_elf}");
         return;
@@ -374,7 +645,9 @@ fn test_voyant_elf_struct_members() {
     let total_with_dwarf = symbols.iter().filter(|s| s.dwarf_type.is_some()).count();
     println!(
         "\nSummary: {} struct members, {} with dwarf_type out of {} total",
-        total_struct_members, total_with_dwarf, symbols.len()
+        total_struct_members,
+        total_with_dwarf,
+        symbols.len()
     );
 
     assert!(
@@ -403,30 +676,29 @@ fn test_voyant_elf_struct_members() {
     };
 
     // g_vd: BSW_02_VoltageDriver_t
-    check_member("g_vd", "last_dac_value", "UWORD", 2);    // uint16_t -> UWORD
-    check_member("g_vd", "write_cnt", "ULONG", 4);          // uint32_t -> ULONG
-    check_member("g_vd", "state", "UBYTE", 1);              // enum (1 byte) -> UBYTE
+    check_member("g_vd", "last_dac_value", "UWORD", 2); // uint16_t -> UWORD
+    check_member("g_vd", "write_cnt", "ULONG", 4); // uint32_t -> ULONG
+    check_member("g_vd", "state", "UBYTE", 1); // enum (1 byte) -> UBYTE
 
     // g_oc: APP_01_Control_t
-    check_member("g_oc", "in_current_value_mA", "FLOAT32_IEEE", 4);  // float32_t -> FLOAT32_IEEE
-    check_member("g_oc", "in_number_of_samples", "ULONG", 4);        // uint32_t -> ULONG
-    check_member("g_oc", "flag_safety_shutdown", "UBYTE", 1);         // _Bool -> UBYTE
-    check_member("g_oc", "cnt_1ms", "ULONG", 4);                     // uint32_t -> ULONG
+    check_member("g_oc", "in_current_value_mA", "FLOAT32_IEEE", 4); // float32_t -> FLOAT32_IEEE
+    check_member("g_oc", "in_number_of_samples", "ULONG", 4); // uint32_t -> ULONG
+    check_member("g_oc", "flag_safety_shutdown", "UBYTE", 1); // _Bool -> UBYTE
+    check_member("g_oc", "cnt_1ms", "ULONG", 4); // uint32_t -> ULONG
 
     // g_sched: SCHED_t
-    check_member("g_sched", "flag_1ms", "UBYTE", 1);                 // uint8_t -> UBYTE
-    check_member("g_sched", "cnt_isr_1ms", "ULONG", 4);              // uint32_t -> ULONG
-    check_member("g_sched", "diag_1ms_overrun_cnt", "UWORD", 2);     // uint16_t -> UWORD
+    check_member("g_sched", "flag_1ms", "UBYTE", 1); // uint8_t -> UBYTE
+    check_member("g_sched", "cnt_isr_1ms", "ULONG", 4); // uint32_t -> ULONG
+    check_member("g_sched", "diag_1ms_overrun_cnt", "UWORD", 2); // uint16_t -> UWORD
 
     // g_cs: BSW_01_CurrentSampling_t
     check_member("g_cs", "out_current_value_mA", "FLOAT32_IEEE", 4); // float32_t -> FLOAT32_IEEE
-    check_member("g_cs", "current_value_raw", "UWORD", 2);           // uint16_t -> UWORD
+    check_member("g_cs", "current_value_raw", "UWORD", 2); // uint16_t -> UWORD
 }
 
 #[test]
 fn test_voyant_struct_members_as_a2l_measurements() {
-    let voyant_elf =
-        r"C:\dev\interview\voyant-photonics\VoyantTakeHomeAssignment\build\Debug\VoyantTakeHomeAssignment.elf";
+    let voyant_elf = r"C:\dev\interview\voyant-photonics\VoyantTakeHomeAssignment\build\Debug\VoyantTakeHomeAssignment.elf";
     if !std::path::Path::new(voyant_elf).exists() {
         println!("Skipping: Voyant ELF not found");
         return;
@@ -488,10 +760,7 @@ fn test_voyant_struct_members_as_a2l_measurements() {
 
     // Verify specific measurements exist with correct types
     let check_a2l = |name: &str, expected_type: &str, expected_addr: u64| {
-        let meas = module
-            .measurement
-            .iter()
-            .find(|m| m.get_name() == name);
+        let meas = module.measurement.iter().find(|m| m.get_name() == name);
         assert!(meas.is_some(), "A2L measurement '{}' not found", name);
         let meas = meas.unwrap();
         assert_eq!(
@@ -502,7 +771,11 @@ fn test_voyant_struct_members_as_a2l_measurements() {
             meas.datatype.to_string().to_uppercase(),
             expected_type
         );
-        let addr = meas.ecu_address.as_ref().map(|a| a.address as u64).unwrap_or(0);
+        let addr = meas
+            .ecu_address
+            .as_ref()
+            .map(|a| a.address as u64)
+            .unwrap_or(0);
         assert_eq!(addr, expected_addr, "Address mismatch for '{}'", name);
     };
 
@@ -510,12 +783,22 @@ fn test_voyant_struct_members_as_a2l_measurements() {
     let vd_write_cnt = symbols.iter().find(|s| s.name == "g_vd.write_cnt").unwrap();
     check_a2l("g_vd.write_cnt", "ULONG", vd_write_cnt.address);
 
-    let vd_last_dac = symbols.iter().find(|s| s.name == "g_vd.last_dac_value").unwrap();
+    let vd_last_dac = symbols
+        .iter()
+        .find(|s| s.name == "g_vd.last_dac_value")
+        .unwrap();
     check_a2l("g_vd.last_dac_value", "UWORD", vd_last_dac.address);
 
     // g_oc members
-    let oc_current = symbols.iter().find(|s| s.name == "g_oc.in_current_value_mA").unwrap();
-    check_a2l("g_oc.in_current_value_mA", "FLOAT32_IEEE", oc_current.address);
+    let oc_current = symbols
+        .iter()
+        .find(|s| s.name == "g_oc.in_current_value_mA")
+        .unwrap();
+    check_a2l(
+        "g_oc.in_current_value_mA",
+        "FLOAT32_IEEE",
+        oc_current.address,
+    );
 
     // Export and verify A2L output contains the measurements
     let exported = core_export_a2l(&a2l);
@@ -536,8 +819,7 @@ fn test_voyant_struct_members_as_a2l_measurements() {
 
 #[test]
 fn test_voyant_dwarf_parsing_directly() {
-    let voyant_elf =
-        r"C:\dev\interview\voyant-photonics\VoyantTakeHomeAssignment\build\Debug\VoyantTakeHomeAssignment.elf";
+    let voyant_elf = r"C:\dev\interview\voyant-photonics\VoyantTakeHomeAssignment\build\Debug\VoyantTakeHomeAssignment.elf";
     if !std::path::Path::new(voyant_elf).exists() {
         println!("Skipping: Voyant ELF not found");
         return;
@@ -562,7 +844,10 @@ fn test_voyant_dwarf_parsing_directly() {
             info.members.len()
         );
         for member in &info.members {
-            println!("    .{} offset={} size={} type={} array_dims={:?}", member.name, member.offset, member.size, member.type_name, member.array_dims);
+            println!(
+                "    .{} offset={} size={} type={} array_dims={:?}",
+                member.name, member.offset, member.size, member.type_name, member.array_dims
+            );
         }
     }
 
@@ -598,8 +883,7 @@ fn test_voyant_dwarf_parsing_directly() {
 
 #[test]
 fn test_array_members_get_matrix_dim() {
-    let voyant_elf =
-        r"C:\dev\interview\voyant-photonics\VoyantTakeHomeAssignment\build\Debug\VoyantTakeHomeAssignment.elf";
+    let voyant_elf = r"C:\dev\interview\voyant-photonics\VoyantTakeHomeAssignment\build\Debug\VoyantTakeHomeAssignment.elf";
     if !std::path::Path::new(voyant_elf).exists() {
         println!("Skipping: Voyant ELF not found");
         return;
@@ -609,7 +893,10 @@ fn test_array_members_get_matrix_dim() {
 
     // Find g_cs.samples — should be uint16_t[200] array
     let samples = symbols.iter().find(|s| s.name == "g_cs.samples");
-    assert!(samples.is_some(), "g_cs.samples should exist in ELF symbols");
+    assert!(
+        samples.is_some(),
+        "g_cs.samples should exist in ELF symbols"
+    );
     let samples = samples.unwrap();
     assert!(
         !samples.array_dims.is_empty(),
@@ -618,7 +905,9 @@ fn test_array_members_get_matrix_dim() {
     );
     println!(
         "g_cs.samples: array_dims={:?}, type={}, a2l_type={}",
-        samples.array_dims, samples.dwarf_type.as_deref().unwrap_or("none"), samples.suggested_a2l_type
+        samples.array_dims,
+        samples.dwarf_type.as_deref().unwrap_or("none"),
+        samples.suggested_a2l_type
     );
 
     // Create A2L and import
@@ -645,7 +934,11 @@ fn test_array_members_get_matrix_dim() {
     core_create_measurements(&mut a2l, None, &[mapping]).unwrap();
 
     let module = &a2l.project.module[0];
-    let meas = module.measurement.iter().find(|m| m.get_name() == "g_cs.samples").unwrap();
+    let meas = module
+        .measurement
+        .iter()
+        .find(|m| m.get_name() == "g_cs.samples")
+        .unwrap();
 
     // Verify MATRIX_DIM is set
     assert!(
@@ -660,14 +953,10 @@ fn test_array_members_get_matrix_dim() {
     );
     let expected_dims: Vec<u16> = samples.array_dims.iter().map(|&d| d as u16).collect();
     assert_eq!(
-        md.dim_list,
-        expected_dims,
+        md.dim_list, expected_dims,
         "matrix_dim dimensions should match array_dims"
     );
-    println!(
-        "g_cs.samples MATRIX_DIM = {:?}",
-        md.dim_list
-    );
+    println!("g_cs.samples MATRIX_DIM = {:?}", md.dim_list);
 
     // Verify export contains MATRIX_DIM
     let exported = core_export_a2l(&a2l);
@@ -736,41 +1025,166 @@ fn test_create_characteristics_from_elf_symbols() {
     core_create_characteristics(&mut a2l, None, &symbols).unwrap();
 
     let module = &a2l.project.module[0];
-    assert_eq!(module.characteristic.len(), 3, "Should have 3 characteristics");
+    assert_eq!(
+        module.characteristic.len(),
+        3,
+        "Should have 3 characteristics"
+    );
 
     // Scalar → VALUE type
-    let vd = module.characteristic.iter().find(|c| c.get_name() == "g_vd.last_dac_value").unwrap();
+    let vd = module
+        .characteristic
+        .iter()
+        .find(|c| c.get_name() == "g_vd.last_dac_value")
+        .unwrap();
     assert_eq!(format!("{:?}", vd.characteristic_type), "Value");
     assert_eq!(vd.address, 0x2000_0100);
     assert!(vd.matrix_dim.is_none());
 
     // Array → VAL_BLK type with MATRIX_DIM
-    let cs = module.characteristic.iter().find(|c| c.get_name() == "g_cs.samples").unwrap();
+    let cs = module
+        .characteristic
+        .iter()
+        .find(|c| c.get_name() == "g_cs.samples")
+        .unwrap();
     assert_eq!(format!("{:?}", cs.characteristic_type), "ValBlk");
     assert_eq!(cs.address, 0x2000_0200);
     assert!(cs.matrix_dim.is_some());
     assert_eq!(cs.matrix_dim.as_ref().unwrap().dim_list, vec![200u16]);
 
     // Float → VALUE type
-    let oc = module.characteristic.iter().find(|c| c.get_name() == "g_oc.in_current_value_mA").unwrap();
+    let oc = module
+        .characteristic
+        .iter()
+        .find(|c| c.get_name() == "g_oc.in_current_value_mA")
+        .unwrap();
     assert_eq!(format!("{:?}", oc.characteristic_type), "Value");
     assert_eq!(oc.address, 0x2000_0300);
 
     // Record layouts should be auto-created
-    assert!(module.record_layout.iter().any(|r| r.get_name() == "__val_UWORD"),
-        "Should have UWORD record layout");
-    assert!(module.record_layout.iter().any(|r| r.get_name() == "__val_FLOAT32_IEEE"),
-        "Should have FLOAT32_IEEE record layout");
+    assert!(
+        module
+            .record_layout
+            .iter()
+            .any(|r| r.get_name() == "__val_UWORD"),
+        "Should have UWORD record layout"
+    );
+    assert!(
+        module
+            .record_layout
+            .iter()
+            .any(|r| r.get_name() == "__val_FLOAT32_IEEE"),
+        "Should have FLOAT32_IEEE record layout"
+    );
 
     // Verify export
     let exported = core_export_a2l(&a2l);
     assert!(exported.contains("/begin CHARACTERISTIC g_vd.last_dac_value"));
     assert!(exported.contains("/begin CHARACTERISTIC g_cs.samples"));
     assert!(exported.contains("MATRIX_DIM"));
-    assert!(exported.contains("__val_UWORD"),
-        "Export should reference __val_UWORD record layout");
+    assert!(
+        exported.contains("__val_UWORD"),
+        "Export should reference __val_UWORD record layout"
+    );
 
     println!("CHARACTERISTIC creation test passed!");
+}
+
+#[test]
+fn test_nested_struct_members_import_as_characteristics() {
+    let a2l_text = r#"ASAP2_VERSION 1 71
+/begin PROJECT test_proj ""
+  /begin MODULE test_mod ""
+  /end MODULE
+/end PROJECT"#;
+
+    let (mut a2l, _) = core_load_a2l_from_string(a2l_text).unwrap();
+    let symbols = core_load_elf_symbols(&elf_path("update_typedef_test.elf")).unwrap();
+
+    let selected_names = ["struct_b.s1.enumval", "struct_b.s2.val_f32"];
+    let mappings: Vec<SymbolWithMapping> = selected_names
+        .iter()
+        .map(|name| {
+            let symbol = symbols
+                .iter()
+                .find(|s| s.name == *name)
+                .unwrap_or_else(|| panic!("Nested symbol '{}' should exist", name));
+            SymbolWithMapping {
+                name: symbol.name.clone(),
+                address: symbol.address,
+                a2l_type: symbol.suggested_a2l_type.clone(),
+                lower_limit: symbol.suggested_limits.0,
+                upper_limit: symbol.suggested_limits.1,
+                conversion: None,
+                resolution: None,
+                accuracy: None,
+                array_dims: symbol.array_dims.clone(),
+                enum_values: symbol.enum_values.clone(),
+            }
+        })
+        .collect();
+
+    core_create_characteristics(&mut a2l, None, &mappings).unwrap();
+
+    let module = &a2l.project.module[0];
+    assert_eq!(module.characteristic.len(), 2);
+
+    let enum_leaf = module
+        .characteristic
+        .iter()
+        .find(|c| c.get_name() == "struct_b.s1.enumval")
+        .expect("Nested enum characteristic should exist");
+    assert_eq!(enum_leaf.address, mappings[0].address as u32);
+    assert_eq!(enum_leaf.deposit, "__val_UWORD");
+    assert_eq!(enum_leaf.conversion, "__cm_struct_b_s1_enumval");
+
+    let float_leaf = module
+        .characteristic
+        .iter()
+        .find(|c| c.get_name() == "struct_b.s2.val_f32")
+        .expect("Nested float characteristic should exist");
+    assert_eq!(float_leaf.address, mappings[1].address as u32);
+    assert_eq!(float_leaf.deposit, "__val_FLOAT32_IEEE");
+
+    assert!(
+        module
+            .record_layout
+            .iter()
+            .any(|r| r.get_name() == "__val_UWORD"),
+        "UWORD record layout should be auto-created for nested enum leaves"
+    );
+    assert!(
+        module
+            .record_layout
+            .iter()
+            .any(|r| r.get_name() == "__val_FLOAT32_IEEE"),
+        "FLOAT32_IEEE record layout should be auto-created for nested float leaves"
+    );
+
+    let cm = module
+        .compu_method
+        .iter()
+        .find(|m| m.get_name() == "__cm_struct_b_s1_enumval")
+        .expect("Nested enum import should create a COMPU_METHOD");
+    assert_eq!(
+        cm.compu_tab_ref.as_ref().unwrap().conversion_table,
+        "__vtab_struct_b_s1_enumval"
+    );
+
+    let vtab = module
+        .compu_vtab
+        .iter()
+        .find(|v| v.get_name() == "__vtab_struct_b_s1_enumval")
+        .expect("Nested enum import should create a COMPU_VTAB");
+    assert_eq!(vtab.number_value_pairs, 3);
+    assert_eq!(vtab.value_pairs[0].out_val, "VALUE_1");
+    assert_eq!(vtab.value_pairs[2].out_val, "VALUE_3");
+
+    let exported = core_export_a2l(&a2l);
+    assert!(exported.contains("/begin CHARACTERISTIC struct_b.s1.enumval"));
+    assert!(exported.contains("/begin CHARACTERISTIC struct_b.s2.val_f32"));
+    assert!(exported.contains("__cm_struct_b_s1_enumval"));
+    assert!(exported.contains("__vtab_struct_b_s1_enumval"));
 }
 
 #[test]
@@ -807,8 +1221,11 @@ fn test_create_characteristics_replaces_existing() {
     };
     core_create_characteristics(&mut a2l, None, &[sym2]).unwrap();
 
-    let chars: Vec<_> = a2l.project.module[0].characteristic.iter()
-        .filter(|c| c.get_name() == "test_var").collect();
+    let chars: Vec<_> = a2l.project.module[0]
+        .characteristic
+        .iter()
+        .filter(|c| c.get_name() == "test_var")
+        .collect();
     assert_eq!(chars.len(), 1, "Should have exactly 1 characteristic");
     assert_eq!(chars[0].address, 0x2000, "Should have updated address");
 }
@@ -846,17 +1263,35 @@ fn test_enum_compu_method_creation() {
     let module = &a2l.project.module[0];
 
     // Characteristic should exist
-    let c = module.characteristic.iter().find(|c| c.get_name() == "g_sc.state").unwrap();
-    assert_eq!(c.conversion, "__cm_g_sc_state", "Should reference auto-generated COMPU_METHOD");
+    let c = module
+        .characteristic
+        .iter()
+        .find(|c| c.get_name() == "g_sc.state")
+        .unwrap();
+    assert_eq!(
+        c.conversion, "__cm_g_sc_state",
+        "Should reference auto-generated COMPU_METHOD"
+    );
 
     // COMPU_METHOD should exist
-    let cm = module.compu_method.iter().find(|m| m.get_name() == "__cm_g_sc_state").unwrap();
+    let cm = module
+        .compu_method
+        .iter()
+        .find(|m| m.get_name() == "__cm_g_sc_state")
+        .unwrap();
     assert_eq!(format!("{:?}", cm.conversion_type), "TabVerb");
     assert!(cm.compu_tab_ref.is_some());
-    assert_eq!(cm.compu_tab_ref.as_ref().unwrap().conversion_table, "__vtab_g_sc_state");
+    assert_eq!(
+        cm.compu_tab_ref.as_ref().unwrap().conversion_table,
+        "__vtab_g_sc_state"
+    );
 
     // COMPU_VTAB should exist with correct values
-    let vtab = module.compu_vtab.iter().find(|v| v.get_name() == "__vtab_g_sc_state").unwrap();
+    let vtab = module
+        .compu_vtab
+        .iter()
+        .find(|v| v.get_name() == "__vtab_g_sc_state")
+        .unwrap();
     assert_eq!(vtab.number_value_pairs, 4);
     assert_eq!(vtab.value_pairs.len(), 4);
     assert_eq!(vtab.value_pairs[0].in_val, 0.0);
@@ -866,10 +1301,22 @@ fn test_enum_compu_method_creation() {
 
     // Verify export
     let exported = core_export_a2l(&a2l);
-    assert!(exported.contains("COMPU_METHOD"), "Export should contain COMPU_METHOD");
-    assert!(exported.contains("COMPU_VTAB"), "Export should contain COMPU_VTAB");
-    assert!(exported.contains("STATE_IDLE"), "Export should contain enum value STATE_IDLE");
-    assert!(exported.contains("STATE_SHUTDOWN"), "Export should contain enum value STATE_SHUTDOWN");
+    assert!(
+        exported.contains("COMPU_METHOD"),
+        "Export should contain COMPU_METHOD"
+    );
+    assert!(
+        exported.contains("COMPU_VTAB"),
+        "Export should contain COMPU_VTAB"
+    );
+    assert!(
+        exported.contains("STATE_IDLE"),
+        "Export should contain enum value STATE_IDLE"
+    );
+    assert!(
+        exported.contains("STATE_SHUTDOWN"),
+        "Export should contain enum value STATE_SHUTDOWN"
+    );
 
     println!("Enum COMPU_METHOD test passed!");
 }
@@ -975,7 +1422,10 @@ fn test_delete_nonexistent_entity() {
         }],
     );
 
-    assert_eq!(deleted, 0, "Should not delete anything for nonexistent name");
+    assert_eq!(
+        deleted, 0,
+        "Should not delete anything for nonexistent name"
+    );
     assert_eq!(a2l.project.module[0].measurement.len(), initial_count);
 }
 
@@ -1023,13 +1473,8 @@ fn test_volatile_types_resolve_through_chain() {
         .flat_map(|info| info.members.iter())
         .filter(|m| m.type_name == "unknown")
         .count();
-    let members_total: usize = dwarf_info
-        .values()
-        .map(|info| info.members.len())
-        .sum();
-    println!(
-        "  Members: {members_total} total, {members_unknown} unknown types"
-    );
+    let members_total: usize = dwarf_info.values().map(|info| info.members.len()).sum();
+    println!("  Members: {members_total} total, {members_unknown} unknown types");
     if members_total > 0 {
         let members_unknown_pct = (members_unknown as f64 / members_total as f64) * 100.0;
         assert!(
@@ -1042,9 +1487,11 @@ fn test_volatile_types_resolve_through_chain() {
 #[test]
 fn test_volatile_array_symbols_get_correct_type_and_dim() {
     // update_test.elf has known C variables with matching DWARF + ELF names
-    let symbols = core_load_elf_symbols(&format!("{}/bin/update_test.elf", fixtures_dir())).unwrap();
+    let symbols =
+        core_load_elf_symbols(&format!("{}/bin/update_test.elf", fixtures_dir())).unwrap();
 
-    let with_dwarf: Vec<_> = symbols.iter()
+    let with_dwarf: Vec<_> = symbols
+        .iter()
         .filter(|s| !s.is_struct_member && s.dwarf_type.is_some())
         .collect();
     println!("ELF symbols with DWARF type: {}", with_dwarf.len());
@@ -1056,7 +1503,8 @@ fn test_volatile_array_symbols_get_correct_type_and_dim() {
     }
 
     // Check symbols with array dimensions
-    let arrays: Vec<_> = with_dwarf.iter()
+    let arrays: Vec<_> = with_dwarf
+        .iter()
         .filter(|s| !s.array_dims.is_empty())
         .collect();
     println!("\nArray symbols: {}", arrays.len());
@@ -1069,36 +1517,74 @@ fn test_volatile_array_symbols_get_correct_type_and_dim() {
 
     // Verify known symbols from update_test.c:
     // float Characteristic_ValBlk[5] should be a float array
-    let valblk = with_dwarf.iter().find(|s| s.name == "Characteristic_ValBlk")
+    let valblk = with_dwarf
+        .iter()
+        .find(|s| s.name == "Characteristic_ValBlk")
         .expect("Characteristic_ValBlk should exist");
-    assert!(!valblk.array_dims.is_empty(), "Characteristic_ValBlk should be an array");
-    assert_eq!(valblk.suggested_a2l_type, "FLOAT32_IEEE",
-        "Characteristic_ValBlk should be FLOAT32_IEEE, got {}", valblk.suggested_a2l_type);
-    assert_eq!(valblk.array_dims, vec![5],
-        "Characteristic_ValBlk should have array_dims=[5], got {:?}", valblk.array_dims);
-    println!("\nCharacteristic_ValBlk: a2l_type={} array_dims={:?} dwarf_type={:?}",
-        valblk.suggested_a2l_type, valblk.array_dims, valblk.dwarf_type);
+    assert!(
+        !valblk.array_dims.is_empty(),
+        "Characteristic_ValBlk should be an array"
+    );
+    assert_eq!(
+        valblk.suggested_a2l_type, "FLOAT32_IEEE",
+        "Characteristic_ValBlk should be FLOAT32_IEEE, got {}",
+        valblk.suggested_a2l_type
+    );
+    assert_eq!(
+        valblk.array_dims,
+        vec![5],
+        "Characteristic_ValBlk should have array_dims=[5], got {:?}",
+        valblk.array_dims
+    );
+    println!(
+        "\nCharacteristic_ValBlk: a2l_type={} array_dims={:?} dwarf_type={:?}",
+        valblk.suggested_a2l_type, valblk.array_dims, valblk.dwarf_type
+    );
 
     // uint8_t Blob_2[256] should be a uint8 array
-    let blob = with_dwarf.iter().find(|s| s.name == "Blob_2")
+    let blob = with_dwarf
+        .iter()
+        .find(|s| s.name == "Blob_2")
         .expect("Blob_2 should exist");
     assert!(!blob.array_dims.is_empty(), "Blob_2 should be an array");
-    assert_eq!(blob.suggested_a2l_type, "UBYTE",
-        "Blob_2 element should be UBYTE, got {}", blob.suggested_a2l_type);
-    assert_eq!(blob.array_dims, vec![256],
-        "Blob_2 should have array_dims=[256], got {:?}", blob.array_dims);
+    assert_eq!(
+        blob.suggested_a2l_type, "UBYTE",
+        "Blob_2 element should be UBYTE, got {}",
+        blob.suggested_a2l_type
+    );
+    assert_eq!(
+        blob.array_dims,
+        vec![256],
+        "Blob_2 should have array_dims=[256], got {:?}",
+        blob.array_dims
+    );
 
     // uint8_t Measurement_Matrix[5][4] should be a 2D matrix
-    let matrix = with_dwarf.iter().find(|s| s.name == "Measurement_Matrix")
+    let matrix = with_dwarf
+        .iter()
+        .find(|s| s.name == "Measurement_Matrix")
         .expect("Measurement_Matrix should exist");
-    assert_eq!(matrix.array_dims.len(), 2,
-        "Measurement_Matrix should have 2 dimensions, got {:?}", matrix.array_dims);
-    assert_eq!(matrix.array_dims, vec![5, 4],
-        "Measurement_Matrix should have array_dims=[5, 4], got {:?}", matrix.array_dims);
-    assert_eq!(matrix.suggested_a2l_type, "UBYTE",
-        "Measurement_Matrix element should be UBYTE, got {}", matrix.suggested_a2l_type);
-    println!("\nMeasurement_Matrix: a2l_type={} array_dims={:?} dwarf_type={:?}",
-        matrix.suggested_a2l_type, matrix.array_dims, matrix.dwarf_type);
+    assert_eq!(
+        matrix.array_dims.len(),
+        2,
+        "Measurement_Matrix should have 2 dimensions, got {:?}",
+        matrix.array_dims
+    );
+    assert_eq!(
+        matrix.array_dims,
+        vec![5, 4],
+        "Measurement_Matrix should have array_dims=[5, 4], got {:?}",
+        matrix.array_dims
+    );
+    assert_eq!(
+        matrix.suggested_a2l_type, "UBYTE",
+        "Measurement_Matrix element should be UBYTE, got {}",
+        matrix.suggested_a2l_type
+    );
+    println!(
+        "\nMeasurement_Matrix: a2l_type={} array_dims={:?} dwarf_type={:?}",
+        matrix.suggested_a2l_type, matrix.array_dims, matrix.dwarf_type
+    );
 }
 
 // ─── Validator tests ────────────────────────────────────────────────────────
@@ -1134,10 +1620,17 @@ fn test_validate_broken_compu_method_xref() {
         .iter()
         .filter(|i| i.rule == "XREF_COMPU_METHOD")
         .collect();
-    assert_eq!(xref_issues.len(), 1, "Should find 1 broken compu method ref");
+    assert_eq!(
+        xref_issues.len(),
+        1,
+        "Should find 1 broken compu method ref"
+    );
     assert_eq!(xref_issues[0].severity, ValidationSeverity::Error);
     assert_eq!(xref_issues[0].entity_name, "broken_meas");
-    println!("Broken COMPU_METHOD xref test passed: {}", xref_issues[0].message);
+    println!(
+        "Broken COMPU_METHOD xref test passed: {}",
+        xref_issues[0].message
+    );
 }
 
 #[test]
@@ -1157,7 +1650,11 @@ fn test_validate_no_compu_method_is_valid() {
         .iter()
         .filter(|i| i.rule == "XREF_COMPU_METHOD" && i.entity_name == "valid_meas")
         .collect();
-    assert_eq!(xref_issues.len(), 0, "NO_COMPU_METHOD should not trigger error");
+    assert_eq!(
+        xref_issues.len(),
+        0,
+        "NO_COMPU_METHOD should not trigger error"
+    );
 }
 
 #[test]
@@ -1189,7 +1686,10 @@ fn test_validate_real_a2l_file() {
 
     println!(
         "software_b.a2l validation: {} errors, {} warnings, {} info ({} total)",
-        result.error_count, result.warning_count, result.info_count, result.issues.len()
+        result.error_count,
+        result.warning_count,
+        result.info_count,
+        result.issues.len()
     );
 
     // Print first 10 issues for insight
@@ -1245,7 +1745,10 @@ fn test_validate_broken_record_layout_xref() {
         .collect();
     assert_eq!(rl_issues.len(), 1, "Should find 1 broken record layout ref");
     assert_eq!(rl_issues[0].severity, ValidationSeverity::Error);
-    println!("Broken RECORD_LAYOUT xref test passed: {}", rl_issues[0].message);
+    println!(
+        "Broken RECORD_LAYOUT xref test passed: {}",
+        rl_issues[0].message
+    );
 }
 
 #[test]
@@ -1268,7 +1771,10 @@ fn test_validate_broken_compu_tab_xref() {
         .collect();
     assert_eq!(tab_issues.len(), 1, "Should find 1 broken compu tab ref");
     assert_eq!(tab_issues[0].severity, ValidationSeverity::Error);
-    println!("Broken COMPU_TAB xref test passed: {}", tab_issues[0].message);
+    println!(
+        "Broken COMPU_TAB xref test passed: {}",
+        tab_issues[0].message
+    );
 }
 
 // ─── Manual entity creation tests ───────────────────────────────────────────
@@ -1412,7 +1918,11 @@ fn test_create_compu_method_and_vtab() {
 
     // Validate — should pass since vtab exists
     let result = core_validate_a2l(&a2l);
-    let tab_issues: Vec<_> = result.issues.iter().filter(|i| i.rule == "XREF_COMPU_TAB").collect();
+    let tab_issues: Vec<_> = result
+        .issues
+        .iter()
+        .filter(|i| i.rule == "XREF_COMPU_TAB")
+        .collect();
     assert_eq!(tab_issues.len(), 0, "No broken compu tab refs expected");
 
     // Reject duplicates

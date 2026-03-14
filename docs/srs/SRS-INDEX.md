@@ -1,7 +1,7 @@
 # SRS Document Index
 
 **Project:** OpenT A2L Forge
-**Last Updated:** 2026-02-27
+**Last Updated:** 2026-03-14
 
 ## Requirements
 
@@ -16,7 +16,7 @@
 | R8 | [ELF Import Workflow](SRS-R8-ELF-Import-Workflow.md) | Implemented | High |
 | R9 | [data-testid Convention](SRS-R9-Data-TestID.md) | Implemented | Medium |
 | R10 | [Recently Used Files](SRS-R10-Recent-Files.md) | Implemented | Low |
-| R11 | [Struct Member Expansion](SRS-R11-Struct-Member-Expansion.md) | Implemented | High |
+| R11 | [Recursive Struct Member Expansion](SRS-R11-Struct-Member-Expansion.md) | Implemented | High |
 | R12 | [Array Support (MATRIX_DIM)](SRS-R12-Array-Support.md) | Implemented | High |
 | R13 | [CHARACTERISTIC Import from ELF](SRS-R13-Characteristic-Import.md) | Implemented | High |
 | R14 | [Enum COMPU_METHOD Derivation](SRS-R14-Enum-CompuMethod.md) | Implemented | Medium |

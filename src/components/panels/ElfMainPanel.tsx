@@ -341,6 +341,9 @@ export function ElfMainPanel({
                     </TableRow>
                   );
                 }
+                const memberPath = row.is_struct_member && row.parent_struct && row.name.startsWith(`${row.parent_struct}.`)
+                  ? row.name.slice(row.parent_struct.length + 1)
+                  : row.name;
                 return (
                   <TableRow key={row.name} data-testid={`elf-row-${row.name}`} hover selected={selectedElfSymbols.has(row.name)} onClick={() => {
                     const next = new Set(selectedElfSymbols);
@@ -356,7 +359,7 @@ export function ElfMainPanel({
                       />
                     </TableCell>
                     <TableCell sx={{ fontFamily: "monospace", pl: row.is_struct_member ? 4 : undefined }}>
-                      {row.is_struct_member ? row.name.split(".").pop() : row.name}
+                      {row.is_struct_member ? memberPath : row.name}
                       {row.is_struct_member && (
                         <Typography component="span" sx={{ color: "#666", fontSize: 10, ml: 0.5, fontFamily: "monospace" }}>
                           ({row.name})

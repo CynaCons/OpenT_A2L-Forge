@@ -415,3 +415,10 @@
 - [x] Updated landing page CSS — screenshot grid, architecture columns, responsive, 6-card feature grid
 - [x] Screenshot test: tests/e2e/take-screenshots.spec.ts for automated screenshot capture
 - [x] Committed and pushed to origin/master — GitHub Pages deployment triggered
+
+Iteration 5.2 — Recursive Nested Structure Support
+- [x] Recursive DWARF nested struct flattening now emits leaf symbols like `struct_b.s1.enumval` while preserving the top-level `parent_struct` grouping contract
+- [x] ELF inspector now renders nested member paths relative to the top-level parent so sibling nested leaves remain distinguishable in the table
+- [x] Added Rust integration coverage for nested ELF flattening, nested measurement import, nested characteristic import, and nested A2L tree/export using existing repo fixtures
+- [x] Updated SRS-R4, SRS-R11, and SRS-INDEX to document recursive nested-structure support
+- [x] Verification: `cargo test --manifest-path src-tauri/Cargo.toml`, `npx playwright test tests/e2e/nested-structures.spec.ts`, `npm run dev` smoke

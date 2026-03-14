@@ -11,6 +11,19 @@ use goblin::elf::Elf;
 
 use crate::types::{DwarfMemberInfo, DwarfSymbolInfo, ElfSymbol};
 
+#[derive(Clone, Debug)]
+struct RawDwarfMemberInfo {
+    name: String,
+    offset: u64,
+    size: u64,
+    type_name: String,
+    type_offset: Option<gimli::DebugInfoOffset>,
+    array_dims: Vec<u64>,
+    element_type_name: Option<String>,
+    element_size: u64,
+    enum_variants: Vec<(String, i64)>,
+}
+
 // ─── Public core functions ──────────────────────────────────────────────────
 
 /// Load ELF symbols from a file path.
@@ -85,11 +98,8 @@ pub fn core_load_elf_symbols_from_buffer(buffer: &[u8]) -> Result<Vec<ElfSymbol>
                         let etype = elem_type.as_deref().unwrap_or("");
                         let (a2l_type, mn, mx) = infer_a2l_type_from_member(etype, elem_size);
                         let dims_str = format_dims(&arr_dims);
-                        let display = format!(
-                            "{}{}",
-                            elem_type.as_deref().unwrap_or("unknown"),
-                            dims_str
-                        );
+                        let display =
+                            format!("{}{}", elem_type.as_deref().unwrap_or("unknown"), dims_str);
                         (a2l_type, mn, mx, arr_dims, Some(display))
                     } else if let Some(dinfo) = dwarf_info.get(name) {
                         // DWARF type name is known but no explicit array info;
@@ -156,8 +166,7 @@ pub fn core_load_elf_symbols_from_buffer(buffer: &[u8]) -> Result<Vec<ElfSymbol>
 
                             // Display type: for arrays/matrices, show "element_type[N][M]..."
                             let display_type = if !member.array_dims.is_empty() {
-                                let elem =
-                                    member.element_type_name.as_deref().unwrap_or("unknown");
+                                let elem = member.element_type_name.as_deref().unwrap_or("unknown");
                                 format!("{}{}", elem, format_dims(&member.array_dims))
                             } else {
                                 member.type_name.clone()
@@ -253,11 +262,7 @@ pub(crate) fn infer_a2l_type(symbol_name: &str, symbol_size: u64) -> (String, f6
                     9223372036854775807.0,
                 )
             } else {
-                (
-                    "A_UINT64".to_string(),
-                    0.0,
-                    18446744073709551615.0,
-                )
+                ("A_UINT64".to_string(), 0.0, 18446744073709551615.0)
             }
         }
         _ => ("UBYTE".to_string(), 0.0, 255.0),
@@ -321,8 +326,7 @@ pub(crate) fn infer_element_size(dwarf_type: &str) -> u64 {
         || t == "bool"
     {
         1
-    } else if t.contains("int16") || t.contains("uint16") || t == "short" || t == "unsigned short"
-    {
+    } else if t.contains("int16") || t.contains("uint16") || t == "short" || t == "unsigned short" {
         2
     } else if t.contains("int32")
         || t.contains("uint32")
@@ -407,9 +411,12 @@ pub fn parse_dwarf_symbols(buffer: &[u8]) -> HashMap<String, DwarfSymbolInfo> {
     let mut type_size_map: HashMap<gimli::DebugInfoOffset, u64> = HashMap::new();
     let mut type_indirection: HashMap<gimli::DebugInfoOffset, gimli::DebugInfoOffset> =
         HashMap::new();
-    let mut struct_members: HashMap<gimli::DebugInfoOffset, Vec<DwarfMemberInfo>> = HashMap::new();
-    let mut array_info: HashMap<gimli::DebugInfoOffset, (Option<gimli::DebugInfoOffset>, Vec<u64>)> =
+    let mut raw_struct_members: HashMap<gimli::DebugInfoOffset, Vec<RawDwarfMemberInfo>> =
         HashMap::new();
+    let mut array_info: HashMap<
+        gimli::DebugInfoOffset,
+        (Option<gimli::DebugInfoOffset>, Vec<u64>),
+    > = HashMap::new();
     let mut enum_values: HashMap<gimli::DebugInfoOffset, Vec<(String, i64)>> = HashMap::new();
     let mut current_enum_offset: Option<gimli::DebugInfoOffset> = None;
 
@@ -467,8 +474,7 @@ pub fn parse_dwarf_symbols(buffer: &[u8]) -> HashMap<String, DwarfSymbolInfo> {
                 gimli::DW_TAG_enumerator => {
                     if let Some(enum_off) = current_enum_offset {
                         if let Some(name) = get_die_name(&dwarf, &unit, entry) {
-                            let val =
-                                get_attr_sdata(entry, gimli::DW_AT_const_value).unwrap_or(0);
+                            let val = get_attr_sdata(entry, gimli::DW_AT_const_value).unwrap_or(0);
                             if let Some(vals) = enum_values.get_mut(&enum_off) {
                                 vals.push((name, val));
                             }
@@ -548,8 +554,8 @@ pub fn parse_dwarf_symbols(buffer: &[u8]) -> HashMap<String, DwarfSymbolInfo> {
                         .unwrap_or(gimli::DebugInfoOffset(0));
                     current_struct_offset = Some(offset);
                     struct_depth = depth;
-                    if !struct_members.contains_key(&offset) {
-                        struct_members.insert(offset, Vec::new());
+                    if !raw_struct_members.contains_key(&offset) {
+                        raw_struct_members.insert(offset, Vec::new());
                     }
                 }
                 gimli::DW_TAG_member
@@ -580,17 +586,7 @@ pub fn parse_dwarf_symbols(buffer: &[u8]) -> HashMap<String, DwarfSymbolInfo> {
 
                             // Check if this member is an array type
                             let resolved_type_off = member_type_off.and_then(|off| {
-                                let mut current = off;
-                                for _ in 0..16 {
-                                    if array_info.contains_key(&current) {
-                                        return Some(current);
-                                    }
-                                    match type_indirection.get(&current) {
-                                        Some(&next) => current = next,
-                                        None => return None,
-                                    }
-                                }
-                                None
+                                resolve_array_through_chain(off, &type_indirection, &array_info)
                             });
 
                             let (arr_dims, elem_type_name, elem_size) =
@@ -627,9 +623,21 @@ pub fn parse_dwarf_symbols(buffer: &[u8]) -> HashMap<String, DwarfSymbolInfo> {
                                 };
 
                             // Check if the member type resolves to an enum
-                            let member_enum_vals = if let Some(roff) = resolved_type_off {
+                            let member_enum_vals = if let Some(arr_off) = resolved_type_off {
+                                array_info
+                                    .get(&arr_off)
+                                    .and_then(|(elem_off, _)| *elem_off)
+                                    .map(|elem_off| {
+                                        resolve_enum_through_chain(
+                                            elem_off,
+                                            &type_indirection,
+                                            &enum_values,
+                                        )
+                                    })
+                                    .unwrap_or_default()
+                            } else if let Some(type_off) = member_type_off {
                                 resolve_enum_through_chain(
-                                    roff,
+                                    type_off,
                                     &type_indirection,
                                     &enum_values,
                                 )
@@ -637,12 +645,13 @@ pub fn parse_dwarf_symbols(buffer: &[u8]) -> HashMap<String, DwarfSymbolInfo> {
                                 Vec::new()
                             };
 
-                            struct_members.entry(struct_off).or_default().push(
-                                DwarfMemberInfo {
+                            raw_struct_members.entry(struct_off).or_default().push(
+                                RawDwarfMemberInfo {
                                     name: member_name,
                                     offset: member_offset,
                                     size: member_size,
                                     type_name: member_type,
+                                    type_offset: member_type_off,
                                     array_dims: arr_dims,
                                     element_type_name: elem_type_name,
                                     element_size: elem_size,
@@ -658,7 +667,7 @@ pub fn parse_dwarf_symbols(buffer: &[u8]) -> HashMap<String, DwarfSymbolInfo> {
                             let struct_off = resolve_struct_through_chain(
                                 direct_off,
                                 &type_indirection,
-                                &struct_members,
+                                &raw_struct_members,
                             );
                             let type_name = resolve_type_name_through_chain(
                                 direct_off,
@@ -718,7 +727,7 @@ pub fn parse_dwarf_symbols(buffer: &[u8]) -> HashMap<String, DwarfSymbolInfo> {
                                 };
 
                             if let Some(soff) = struct_off {
-                                if let Some(members) = struct_members.get(&soff) {
+                                if raw_struct_members.contains_key(&soff) {
                                     let base_type = resolve_type_name_through_chain(
                                         soff,
                                         &type_map,
@@ -732,11 +741,23 @@ pub fn parse_dwarf_symbols(buffer: &[u8]) -> HashMap<String, DwarfSymbolInfo> {
                                         )
                                     })
                                     .unwrap_or_default();
+                                    let mut members = Vec::new();
+                                    let mut visited_structs = HashSet::new();
+                                    flatten_struct_members(
+                                        soff,
+                                        "",
+                                        0,
+                                        &raw_struct_members,
+                                        &type_indirection,
+                                        &array_info,
+                                        &mut visited_structs,
+                                        &mut members,
+                                    );
                                     result.insert(
                                         var_name.clone(),
                                         DwarfSymbolInfo {
                                             type_name: base_type,
-                                            members: members.clone(),
+                                            members,
                                             enum_variants: var_enum_vals.clone(),
                                             array_dims: var_arr_dims.clone(),
                                             element_type_name: var_elem_type.clone(),
@@ -780,11 +801,81 @@ pub fn parse_dwarf_symbols(buffer: &[u8]) -> HashMap<String, DwarfSymbolInfo> {
 
 // ─── DWARF helper functions ─────────────────────────────────────────────────
 
+fn flatten_struct_members(
+    struct_offset: gimli::DebugInfoOffset,
+    prefix: &str,
+    base_offset: u64,
+    raw_struct_members: &HashMap<gimli::DebugInfoOffset, Vec<RawDwarfMemberInfo>>,
+    type_indirection: &HashMap<gimli::DebugInfoOffset, gimli::DebugInfoOffset>,
+    array_info: &HashMap<gimli::DebugInfoOffset, (Option<gimli::DebugInfoOffset>, Vec<u64>)>,
+    visited_structs: &mut HashSet<gimli::DebugInfoOffset>,
+    out: &mut Vec<DwarfMemberInfo>,
+) {
+    if !visited_structs.insert(struct_offset) {
+        return;
+    }
+
+    if let Some(members) = raw_struct_members.get(&struct_offset) {
+        for member in members {
+            let full_name = if prefix.is_empty() {
+                member.name.clone()
+            } else {
+                format!("{prefix}.{}", member.name)
+            };
+            let total_offset = base_offset + member.offset;
+
+            let nested_struct = member.type_offset.and_then(|type_off| {
+                resolve_struct_through_chain(type_off, type_indirection, raw_struct_members)
+            });
+            let array_of_struct = member.type_offset.and_then(|type_off| {
+                resolve_array_element_struct_through_chain(
+                    type_off,
+                    type_indirection,
+                    array_info,
+                    raw_struct_members,
+                )
+            });
+
+            if member.array_dims.is_empty() {
+                if let Some(nested_struct) = nested_struct {
+                    flatten_struct_members(
+                        nested_struct,
+                        &full_name,
+                        total_offset,
+                        raw_struct_members,
+                        type_indirection,
+                        array_info,
+                        visited_structs,
+                        out,
+                    );
+                    continue;
+                }
+            } else if array_of_struct.is_some() {
+                // Arrays of structs need layout semantics the current flat importer does not model.
+                continue;
+            }
+
+            out.push(DwarfMemberInfo {
+                name: full_name,
+                offset: total_offset,
+                size: member.size,
+                type_name: member.type_name.clone(),
+                array_dims: member.array_dims.clone(),
+                element_type_name: member.element_type_name.clone(),
+                element_size: member.element_size,
+                enum_variants: member.enum_variants.clone(),
+            });
+        }
+    }
+
+    visited_structs.remove(&struct_offset);
+}
+
 /// Chase through typedef/const/volatile/restrict indirection until we find a struct type.
-fn resolve_struct_through_chain(
+fn resolve_struct_through_chain<T>(
     start: gimli::DebugInfoOffset,
     type_indirection: &HashMap<gimli::DebugInfoOffset, gimli::DebugInfoOffset>,
-    struct_members: &HashMap<gimli::DebugInfoOffset, Vec<DwarfMemberInfo>>,
+    struct_members: &HashMap<gimli::DebugInfoOffset, Vec<T>>,
 ) -> Option<gimli::DebugInfoOffset> {
     let mut current = start;
     for _ in 0..16 {
@@ -797,6 +888,35 @@ fn resolve_struct_through_chain(
         }
     }
     None
+}
+
+fn resolve_array_through_chain(
+    start: gimli::DebugInfoOffset,
+    type_indirection: &HashMap<gimli::DebugInfoOffset, gimli::DebugInfoOffset>,
+    array_info: &HashMap<gimli::DebugInfoOffset, (Option<gimli::DebugInfoOffset>, Vec<u64>)>,
+) -> Option<gimli::DebugInfoOffset> {
+    let mut current = start;
+    for _ in 0..16 {
+        if array_info.contains_key(&current) {
+            return Some(current);
+        }
+        match type_indirection.get(&current) {
+            Some(&next) => current = next,
+            None => return None,
+        }
+    }
+    None
+}
+
+fn resolve_array_element_struct_through_chain<T>(
+    start: gimli::DebugInfoOffset,
+    type_indirection: &HashMap<gimli::DebugInfoOffset, gimli::DebugInfoOffset>,
+    array_info: &HashMap<gimli::DebugInfoOffset, (Option<gimli::DebugInfoOffset>, Vec<u64>)>,
+    struct_members: &HashMap<gimli::DebugInfoOffset, Vec<T>>,
+) -> Option<gimli::DebugInfoOffset> {
+    let array_offset = resolve_array_through_chain(start, type_indirection, array_info)?;
+    let element_offset = array_info.get(&array_offset)?.0?;
+    resolve_struct_through_chain(element_offset, type_indirection, struct_members)
 }
 
 /// Chase through typedef chain to find enum values if the type resolves to an enum.

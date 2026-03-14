@@ -30,10 +30,12 @@ export const FIXTURES = {
     software_b: path.resolve(__dirname, "../../external/a2ltool/fixtures/a2l/software_b.a2l"),
     sample: path.resolve(__dirname, "../../external/a2ltool/fixtures/a2l/sample.a2l"),
     from_source: path.resolve(__dirname, "../../external/a2ltool/fixtures/a2l/from_source.a2l"),
+    from_source_structs: path.resolve(__dirname, "../../external/a2ltool/fixtures/a2l/from_source_structs.a2l"),
   },
   elf: {
     debugdata_gcc: path.resolve(__dirname, "../../external/a2ltool/fixtures/bin/debugdata_gcc.elf"),
     update_test: path.resolve(__dirname, "../../external/a2ltool/fixtures/bin/update_test.elf"),
+    update_typedef_test: path.resolve(__dirname, "../../external/a2ltool/fixtures/bin/update_typedef_test.elf"),
     software_b: path.resolve(__dirname, "../../external/a2ltool/fixtures/bin/software_b.elf"),
     software_a: path.resolve(__dirname, "../../external/a2ltool/fixtures/bin/software_a.elf"),
   },
