@@ -422,3 +422,18 @@ Iteration 5.2 — Recursive Nested Structure Support
 - [x] Added Rust integration coverage for nested ELF flattening, nested measurement import, nested characteristic import, and nested A2L tree/export using existing repo fixtures
 - [x] Updated SRS-R4, SRS-R11, and SRS-INDEX to document recursive nested-structure support
 - [x] Verification: `cargo test --manifest-path src-tauri/Cargo.toml`, `npx playwright test tests/e2e/nested-structures.spec.ts`, `npm run dev` smoke
+
+## Iteration 5.3 — CLI A2L Sync Support
+- [x] Added `src-tauri/src/cli_sync.rs` with versioned JSON sync-project loading/saving, relative-path resolution, headless sync execution, safe report mode, and explicit prune mode
+- [x] Added the standalone `opent_a2l_forge_cli` binary with `sync --project`, optional `--output`, optional `--missing`, JSON output, and build-friendly exit codes
+- [x] Extended the desktop ELF workflow with save/load sync-project actions, explicit struct-root tracking, restored selector state, and persisted preview-based mapping overrides
+- [x] Added checked-in CLI JSON fixtures, new Rust integration coverage in `src-tauri/tests/cli_sync.rs`, and a binary Playwright E2E for saving and reloading a sync project
+- [x] Updated `docs/srs/SRS-R20-CLI-Sync.md`, `docs/srs/SRS-INDEX.md`, and `AGENTS.md` for the CLI workflow and conventions
+- [x] Verification: `cargo test --manifest-path src-tauri/Cargo.toml`, `cargo run --manifest-path src-tauri/Cargo.toml --bin opent_a2l_forge_cli -- sync ...`, `npm run tauri build`, `npx playwright test tests/e2e/cli-sync-project.spec.ts`, `npm run dev`
+
+## Iteration 5.4 — CLI Release Docs, Hero, and GitHub Assets
+- [x] Updated the GitHub Pages hero and feature copy to position the desktop app alongside the build-system CLI workflow
+- [x] Added `docs/CLI-Quickstart.md` and refreshed `README.md` so the release docs cover sync-project authoring, CLI invocation, exit codes, and release outputs
+- [x] Added `docs/screenshots/cli-project-view.png` plus a reproducible `scripts/generate-cli-doc-screenshot.mjs` renderer for the CLI run screenshot
+- [x] Isolated the standalone CLI build behind the Cargo `cli` feature and a separate `src-tauri/target/cli-release` output so Tauri GUI bundles no longer collide with the CLI artifact
+- [x] Verification: `npm run build`, `npm run tauri build`, `npm run dev` smoke start

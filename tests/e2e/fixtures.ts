@@ -90,6 +90,22 @@ export async function openElfFile(page: Page, filePath: string): Promise<void> {
   );
 }
 
+export async function openCliProject(page: Page, filePath: string): Promise<void> {
+  const normalized = filePath.replace(/\//g, "\\");
+  await page.evaluate(
+    (p: string) => (window as any).__E2E__.loadCliProjectFromPath(p),
+    normalized
+  );
+}
+
+export async function saveCliProject(page: Page, filePath: string): Promise<void> {
+  const normalized = filePath.replace(/\//g, "\\");
+  await page.evaluate(
+    (p: string) => (window as any).__E2E__.saveCliProjectToPath(p),
+    normalized
+  );
+}
+
 /** Create a new empty A2L via the UI button (no dialog needed) */
 export async function createNewA2l(page: Page): Promise<void> {
   await page.getByTestId("sidebar-explorer").click();

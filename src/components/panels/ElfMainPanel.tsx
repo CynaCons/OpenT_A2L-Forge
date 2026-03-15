@@ -33,6 +33,8 @@ interface ElfMainPanelProps {
   structParentNames: Set<string>;
   selectedElfSymbols: Set<string>;
   onSelectedElfSymbolsChange: (symbols: Set<string>) => void;
+  onToggleElfSymbol: (symbolName: string) => void;
+  onSetStructRootSelection: (rootName: string, checked: boolean) => void;
   collapsedStructs: Set<string>;
   onCollapsedStructsChange: (updater: (prev: Set<string>) => Set<string>) => void;
   elfSearchQuery: string;
@@ -59,6 +61,9 @@ interface ElfMainPanelProps {
   onDismissElfBanner: () => void;
   onReloadElf: () => void;
   onUpdateEcuAddresses: () => void;
+  onLoadCliProject: () => void;
+  onSaveCliProject: () => void;
+  canSaveCliProject: boolean;
   onAddSymbols: () => void;
 }
 
@@ -70,6 +75,8 @@ export function ElfMainPanel({
   structParentNames,
   selectedElfSymbols,
   onSelectedElfSymbolsChange,
+  onToggleElfSymbol,
+  onSetStructRootSelection,
   collapsedStructs,
   onCollapsedStructsChange,
   elfSearchQuery,
@@ -96,6 +103,9 @@ export function ElfMainPanel({
   onDismissElfBanner,
   onReloadElf,
   onUpdateEcuAddresses,
+  onLoadCliProject,
+  onSaveCliProject,
+  canSaveCliProject,
   onAddSymbols,
 }: ElfMainPanelProps) {
   const handleSortClick = (col: "name" | "address" | "size" | "type") => {
@@ -117,6 +127,24 @@ export function ElfMainPanel({
           {selectedElfSymbols.size > 0 && <Chip label={`${selectedElfSymbols.size} Selected`} size="small" color="primary" sx={{ height: 20 }} />}
         </Stack>
         <Stack direction="row" spacing={1}>
+          <Button
+            data-testid="btn-load-cli-project"
+            variant="outlined"
+            size="small"
+            onClick={onLoadCliProject}
+            disabled={isBusy}
+          >
+            Load Sync Project
+          </Button>
+          <Button
+            data-testid="btn-save-cli-project"
+            variant="outlined"
+            size="small"
+            onClick={onSaveCliProject}
+            disabled={!canSaveCliProject || isBusy}
+          >
+            Save Sync Project
+          </Button>
           {metadata && elfSymbols.length > 0 && (
             <Button
               data-testid="btn-update-ecu"
@@ -309,16 +337,12 @@ export function ElfMainPanel({
                     >
                       <TableCell padding="checkbox" onClick={e => e.stopPropagation()}>
                         <Checkbox
-                          data-testid={`checkbox-elf-${row.name}`}
-                          checked={allMembersSelected && someMembersSelected}
-                          indeterminate={someMembersSelected && !allMembersSelected}
-                          size="small"
-                          onChange={(e) => {
-                            const members = elfSymbols.filter(s => s.parent_struct === row.name).map(s => s.name);
-                            const next = new Set(selectedElfSymbols);
-                            if (e.target.checked) members.forEach(n => next.add(n));
-                            else members.forEach(n => next.delete(n));
-                            onSelectedElfSymbolsChange(next);
+                        data-testid={`checkbox-elf-${row.name}`}
+                        checked={allMembersSelected && someMembersSelected}
+                        indeterminate={someMembersSelected && !allMembersSelected}
+                        size="small"
+                        onChange={(e) => {
+                            onSetStructRootSelection(row.name, e.target.checked);
                           }}
                         />
                       </TableCell>
@@ -346,10 +370,7 @@ export function ElfMainPanel({
                   : row.name;
                 return (
                   <TableRow key={row.name} data-testid={`elf-row-${row.name}`} hover selected={selectedElfSymbols.has(row.name)} onClick={() => {
-                    const next = new Set(selectedElfSymbols);
-                    if (next.has(row.name)) next.delete(row.name);
-                    else next.add(row.name);
-                    onSelectedElfSymbolsChange(next);
+                    onToggleElfSymbol(row.name);
                   }} sx={{ cursor: "pointer", bgcolor: row.address_warning ? "rgba(255, 152, 0, 0.08)" : undefined }}>
                     <TableCell padding="checkbox">
                       <Checkbox

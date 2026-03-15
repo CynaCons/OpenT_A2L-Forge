@@ -25,3 +25,4 @@
 | R17 | [A2L Validation Engine](SRS-R17-A2L-Validator.md) | Implemented | High |
 | R18 | [Manual Entity Creation](SRS-R18-Manual-Entity-Creation.md) | Implemented | High |
 | R19 | [Frontend Component Split](SRS-R19-Frontend-Refactor.md) | Implemented | Medium |
+| R20 | [CLI A2L Sync Support](SRS-R20-CLI-Sync.md) | Implemented | High |

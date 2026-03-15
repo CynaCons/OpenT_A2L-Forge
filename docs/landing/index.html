@@ -3,26 +3,58 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>OpenT A2L-Forge — ASAP2/A2L Calibration File Editor</title>
-  <meta name="description" content="Open-source desktop application for editing ASAP2/A2L calibration files with ELF binary import. Built with Tauri, React, and Rust.">
+  <title>OpenT A2L-Forge — A2L Editor and CLI Sync</title>
+  <meta name="description" content="Open-source desktop editor and build-system CLI for ASAP2/A2L calibration files with ELF and DWARF sync. Built with Tauri, React, and Rust.">
   <link rel="stylesheet" href="style.css">
 </head>
 <body>
 
   <!-- Hero -->
   <section class="hero">
-    <div class="hero-badge">Part of the OpenTools Series</div>
-    <h1><span>OpenT</span> A2L-Forge</h1>
-    <p class="tagline">
-      Open-source desktop editor for ASAP2/A2L calibration files with ELF binary import. Fast, native, and built for automotive engineers.
-    </p>
-    <div class="hero-buttons">
-      <a href="https://github.com/CynaCons/OpenT_A2L-Forge/releases" class="btn btn-primary">
-        Download Latest Release
-      </a>
-      <a href="https://github.com/CynaCons/OpenT_A2L-Forge" class="btn btn-secondary">
-        View on GitHub
-      </a>
+    <div class="hero-inner">
+      <div class="hero-copy">
+        <div class="hero-badge">Part of the OpenTools Series</div>
+        <h1><span>OpenT</span> A2L-Forge</h1>
+        <p class="tagline">
+          Native ASAP2/A2L editing in the desktop app, plus a versioned CLI sync workflow you can drop straight into your firmware build.
+        </p>
+        <div class="hero-pills">
+          <span class="hero-pill">Desktop A2L Editor</span>
+          <span class="hero-pill">ELF / DWARF Import</span>
+          <span class="hero-pill">Build-System CLI Sync</span>
+        </div>
+        <div class="hero-buttons">
+          <a href="https://github.com/CynaCons/OpenT_A2L-Forge/releases" class="btn btn-primary">
+            Download Latest Release
+          </a>
+          <a href="https://github.com/CynaCons/OpenT_A2L-Forge/blob/master/docs/CLI-Quickstart.md" class="btn btn-secondary">
+            Read CLI Guide
+          </a>
+          <a href="https://github.com/CynaCons/OpenT_A2L-Forge" class="btn btn-secondary">
+            View on GitHub
+          </a>
+        </div>
+      </div>
+      <div class="hero-shell">
+        <div class="shell-top">
+          <span>CLI sync run</span>
+          <div class="shell-lights">
+            <span></span>
+            <span></span>
+            <span></span>
+          </div>
+        </div>
+        <pre><code>$ opent_a2l_forge_cli sync --project engine.a2lsync.json --missing report --json
+{
+  "resolved_names": ["struct_b.s1.val_i32", "struct_b.s2.val_f32"],
+  "stale_names": ["struct_b.legacy_enum"],
+  "unresolved_selectors": [],
+  "missing_policy": "report"
+}
+
+exit code: 2
+# build fails safely until stale A2L items are reviewed</code></pre>
+      </div>
     </div>
   </section>
 
@@ -35,8 +67,33 @@
         <p>Browse and edit A2L entities with a VS Code-inspired interface</p>
       </div>
       <div class="screenshot-card">
-        <img src="https://raw.githubusercontent.com/CynaCons/OpenT_A2L-Forge/master/docs/screenshots/create-entity.png" alt="Create Entity Dialog" loading="lazy">
-        <p>Create Measurements, Characteristics, CompuMethods, and more</p>
+        <img src="https://raw.githubusercontent.com/CynaCons/OpenT_A2L-Forge/master/docs/screenshots/import-view.png" alt="ELF import workflow" loading="lazy">
+        <p>Preview ELF imports with inferred A2L types before applying changes to the project</p>
+      </div>
+      <div class="screenshot-card">
+        <img src="https://raw.githubusercontent.com/CynaCons/OpenT_A2L-Forge/master/docs/screenshots/cli-project-view.png" alt="CLI sync run output" loading="lazy">
+        <p>Run sync projects in your build and inspect JSON output with safe stale-item reporting</p>
+      </div>
+    </div>
+  </section>
+
+  <section class="workflow">
+    <div class="workflow-card">
+      <p class="workflow-label">Build-System Workflow</p>
+      <h2>Author once in the GUI, sync from the CLI on every build</h2>
+      <div class="workflow-steps">
+        <div>
+          <strong>1. Select tracked content</strong>
+          <span>Pick leaf symbols or whole struct roots in the ELF inspector.</span>
+        </div>
+        <div>
+          <strong>2. Save a sync project</strong>
+          <span>Commit the generated JSON file beside your A2L and ELF paths.</span>
+        </div>
+        <div>
+          <strong>3. Run the CLI</strong>
+          <span>Use `report` for safe build failures or `prune` to remove stale tracked items.</span>
+        </div>
       </div>
     </div>
   </section>
@@ -55,6 +112,10 @@
         <p>Import symbols from ELF binaries with DWARF debug info. Smart type inference, struct member expansion, and array support.</p>
       </div>
       <div class="feature-card">
+        <h3>CLI Sync Projects</h3>
+        <p>Save versioned sync-project JSON files from the GUI and run repeatable `opent_a2l_forge_cli sync --project ...` updates in your build system.</p>
+      </div>
+      <div class="feature-card">
         <h3>Manual Entity Creation</h3>
         <p>Create all 6 major A2L entity types directly from the UI: Measurements, Characteristics, AxisPts, CompuMethods, CompuVtabs, and RecordLayouts.</p>
       </div>
@@ -65,6 +126,10 @@
       <div class="feature-card">
         <h3>Conflict Resolution</h3>
         <p>Detect and resolve symbol conflicts during import. Preview changes before applying, with skip, replace, and batch options.</p>
+      </div>
+      <div class="feature-card">
+        <h3>Nested Struct Sync</h3>
+        <p>Track top-level struct roots and import newly added nested leaves automatically while preserving safe stale-item reporting.</p>
       </div>
       <div class="feature-card">
         <h3>Live ELF Watching</h3>
@@ -85,6 +150,7 @@
           <li><code>types.rs</code> — Shared types and traits</li>
           <li><code>a2l_ops.rs</code> — A2L CRUD + tree building</li>
           <li><code>elf_parser.rs</code> — ELF/DWARF parsing</li>
+          <li><code>cli_sync.rs</code> — Project loading + headless sync engine</li>
           <li><code>validator.rs</code> — A2L validation engine</li>
         </ul>
       </div>
@@ -95,6 +161,7 @@
           <li>Panels: Explorer, ELF Inspector, Entity Detail, Settings</li>
           <li>Dialogs: Create, Delete, Conflict, Preview, Unsaved</li>
           <li>Editors: Measurement, Characteristic, AxisPts, CompuMethod, CompuVtab, RecordLayout</li>
+          <li>CLI authoring: save/load sync projects from the ELF workflow</li>
         </ul>
       </div>
     </div>

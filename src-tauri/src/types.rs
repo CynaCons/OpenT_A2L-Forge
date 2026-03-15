@@ -4,6 +4,8 @@
 //! and the TypeScript frontend, as well as the `A2lDetailProvider` trait for generating
 //! tree view details from A2L entities.
 
+use std::collections::HashMap;
+
 use serde::{Deserialize, Serialize};
 
 // ─── Tree / metadata types ──────────────────────────────────────────────────
@@ -713,6 +715,89 @@ pub struct SymbolWithMapping {
     pub array_dims: Vec<u64>,
     #[serde(default)]
     pub enum_values: Vec<(String, i64)>,
+}
+
+fn default_cli_sync_project_version() -> u32 {
+    1
+}
+
+/// Missing-item handling for CLI sync runs.
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum CliSyncMissingPolicy {
+    Report,
+    Prune,
+}
+
+impl Default for CliSyncMissingPolicy {
+    fn default() -> Self {
+        Self::Report
+    }
+}
+
+/// A tracked selector in the CLI project file.
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq, Hash)]
+#[serde(tag = "kind", rename_all = "snake_case")]
+pub enum TrackedSelector {
+    Symbol { name: String },
+    StructRoot { name: String },
+}
+
+/// Per-leaf import overrides persisted in a CLI sync project file.
+#[derive(Serialize, Deserialize, Clone, Debug)]
+pub struct CliSymbolMappingOverride {
+    pub a2l_type: String,
+    pub lower_limit: f64,
+    pub upper_limit: f64,
+    pub conversion: Option<String>,
+    pub resolution: Option<u16>,
+    pub accuracy: Option<f64>,
+    #[serde(default)]
+    pub array_dims: Vec<u64>,
+    #[serde(default)]
+    pub enum_values: Vec<(String, i64)>,
+}
+
+/// Versioned JSON project file used by the CLI sync flow.
+#[derive(Serialize, Deserialize, Clone, Debug)]
+pub struct CliSyncProject {
+    #[serde(default = "default_cli_sync_project_version")]
+    pub version: u32,
+    pub a2l_path: String,
+    pub elf_path: String,
+    pub module_name: Option<String>,
+    pub output_path: Option<String>,
+    #[serde(default)]
+    pub selectors: Vec<TrackedSelector>,
+    #[serde(default)]
+    pub mapping_overrides: HashMap<String, CliSymbolMappingOverride>,
+    #[serde(default)]
+    pub missing_policy: CliSyncMissingPolicy,
+}
+
+/// CLI project file plus resolved absolute filesystem paths.
+#[derive(Serialize, Deserialize, Clone, Debug)]
+pub struct LoadedCliSyncProject {
+    pub project_path: String,
+    pub resolved_a2l_path: String,
+    pub resolved_elf_path: String,
+    pub resolved_output_path: Option<String>,
+    pub project: CliSyncProject,
+}
+
+/// Result of running a CLI sync project.
+#[derive(Serialize, Deserialize, Clone, Debug)]
+pub struct CliSyncResult {
+    pub project_path: String,
+    pub output_path: String,
+    pub missing_policy: CliSyncMissingPolicy,
+    pub resolved_names: Vec<String>,
+    pub imported_names: Vec<String>,
+    pub replaced_names: Vec<String>,
+    pub stale_names: Vec<String>,
+    pub deleted_names: Vec<String>,
+    pub conflicts: Vec<String>,
+    pub unresolved_selectors: Vec<String>,
 }
 
 /// Describes a name conflict between an ELF symbol and an existing A2L entity.

@@ -6,24 +6,28 @@
 //! - [`elf_parser`] — ELF/DWARF parsing and type inference
 //! - [`validator`] — A2L validation engine
 
-pub mod types;
 pub mod a2l_ops;
+pub mod cli_sync;
 pub mod elf_parser;
+pub mod types;
 pub mod validator;
 
 // Re-export public API for integration tests and external consumers
-pub use types::*;
 pub use a2l_ops::*;
-pub use elf_parser::{core_load_elf_symbols, core_load_elf_symbols_from_buffer, parse_dwarf_symbols};
+pub use cli_sync::*;
+pub use elf_parser::{
+    core_load_elf_symbols, core_load_elf_symbols_from_buffer, parse_dwarf_symbols,
+};
+pub use types::*;
 pub use validator::*;
 
-use std::sync::Mutex;
 use std::fs;
 use std::path::PathBuf;
+use std::sync::Mutex;
 
-use notify::{Watcher, RecursiveMode, Event, EventKind};
-use tauri::Emitter;
 use a2lfile::{A2lObjectName, A2lObjectNameSetter, Header};
+use notify::{Event, EventKind, RecursiveMode, Watcher};
+use tauri::Emitter;
 
 // ─── Application state ─────────────────────────────────────────────────────
 
@@ -113,6 +117,18 @@ fn save_a2l_to_path(path: String, state: tauri::State<AppState>) -> Result<(), S
     let content = a2l.write_to_string();
     fs::write(&path, content).map_err(|e| e.to_string())?;
     Ok(())
+}
+
+/// Save a CLI sync project file to disk.
+#[tauri::command]
+fn save_cli_sync_project(path: String, project: CliSyncProject) -> Result<(), String> {
+    core_save_cli_sync_project(&path, &project)
+}
+
+/// Load a CLI sync project file and resolve its referenced paths.
+#[tauri::command]
+fn load_cli_sync_project(path: String) -> Result<LoadedCliSyncProject, String> {
+    core_load_cli_sync_project(&path)
 }
 
 /// List all core entities (modules, measurements, characteristics, axis points).
@@ -235,7 +251,11 @@ fn get_measurement(name: String, state: tauri::State<AppState>) -> Result<Measur
 
 /// Update a measurement's fields by name.
 #[tauri::command]
-fn update_measurement(name: String, data: MeasurementData, state: tauri::State<AppState>) -> Result<(), String> {
+fn update_measurement(
+    name: String,
+    data: MeasurementData,
+    state: tauri::State<AppState>,
+) -> Result<(), String> {
     let mut guard = state.a2l.lock().map_err(|_| "State lock poisoned")?;
     let a2l = guard.as_mut().ok_or("No A2L loaded")?;
 
@@ -244,11 +264,11 @@ fn update_measurement(name: String, data: MeasurementData, state: tauri::State<A
 
     let new_address = match data.ecu_address {
         Some(s) if !s.trim().is_empty() => {
-             let clean = s.trim().trim_start_matches("0x").trim_start_matches("0X");
-             let addr_val = u32::from_str_radix(clean, 16).map_err(|_| "Invalid hex address")?;
-             Some(a2lfile::EcuAddress::new(addr_val))
-        },
-        _ => None
+            let clean = s.trim().trim_start_matches("0x").trim_start_matches("0X");
+            let addr_val = u32::from_str_radix(clean, 16).map_err(|_| "Invalid hex address")?;
+            Some(a2lfile::EcuAddress::new(addr_val))
+        }
+        _ => None,
     };
 
     for module in a2l.project.module.iter_mut() {
@@ -270,7 +290,10 @@ fn update_measurement(name: String, data: MeasurementData, state: tauri::State<A
 
 /// Retrieve a single characteristic's data by name.
 #[tauri::command]
-fn get_characteristic(name: String, state: tauri::State<AppState>) -> Result<CharacteristicData, String> {
+fn get_characteristic(
+    name: String,
+    state: tauri::State<AppState>,
+) -> Result<CharacteristicData, String> {
     let guard = state.a2l.lock().map_err(|_| "State lock poisoned")?;
     let a2l = guard.as_ref().ok_or("No A2L loaded")?;
 
@@ -295,38 +318,50 @@ fn get_characteristic(name: String, state: tauri::State<AppState>) -> Result<Cha
 
 /// Update a characteristic's fields by name.
 #[tauri::command]
-fn update_characteristic(name: String, data: CharacteristicData, state: tauri::State<AppState>) -> Result<(), String> {
+fn update_characteristic(
+    name: String,
+    data: CharacteristicData,
+    state: tauri::State<AppState>,
+) -> Result<(), String> {
     let mut guard = state.a2l.lock().map_err(|_| "State lock poisoned")?;
     let a2l = guard.as_mut().ok_or("No A2L loaded")?;
 
     let new_type = string_to_characteristic_type(&data.characteristic_type)
         .ok_or_else(|| format!("Invalid characteristic type: {}", data.characteristic_type))?;
 
-    let clean_addr = data.address.trim().trim_start_matches("0x").trim_start_matches("0X");
+    let clean_addr = data
+        .address
+        .trim()
+        .trim_start_matches("0x")
+        .trim_start_matches("0X");
     let new_addr_val = u32::from_str_radix(clean_addr, 16).map_err(|_| "Invalid hex address")?;
 
     let new_bit_mask = match data.bit_mask {
         Some(s) if !s.trim().is_empty() => {
-             let clean = s.trim().trim_start_matches("0x").trim_start_matches("0X");
-             let mask_val = u64::from_str_radix(clean, 16).map_err(|_| "Invalid hex bit mask")?;
-             Some(a2lfile::BitMask::new(mask_val))
-        },
-        _ => None
+            let clean = s.trim().trim_start_matches("0x").trim_start_matches("0X");
+            let mask_val = u64::from_str_radix(clean, 16).map_err(|_| "Invalid hex bit mask")?;
+            Some(a2lfile::BitMask::new(mask_val))
+        }
+        _ => None,
     };
 
     for module in a2l.project.module.iter_mut() {
-        if let Some(c) = module.characteristic.iter_mut().find(|c| c.get_name() == name) {
-           c.set_name(data.name);
-           c.long_identifier = data.long_identifier;
-           c.characteristic_type = new_type;
-           c.address = new_addr_val;
-           c.deposit = data.deposit;
-           c.max_diff = data.max_diff;
-           c.conversion = data.conversion;
-           c.lower_limit = data.lower_limit;
-           c.upper_limit = data.upper_limit;
-           c.bit_mask = new_bit_mask;
-           return Ok(());
+        if let Some(c) = module
+            .characteristic
+            .iter_mut()
+            .find(|c| c.get_name() == name)
+        {
+            c.set_name(data.name);
+            c.long_identifier = data.long_identifier;
+            c.characteristic_type = new_type;
+            c.address = new_addr_val;
+            c.deposit = data.deposit;
+            c.max_diff = data.max_diff;
+            c.conversion = data.conversion;
+            c.lower_limit = data.lower_limit;
+            c.upper_limit = data.upper_limit;
+            c.bit_mask = new_bit_mask;
+            return Ok(());
         }
     }
     Err(format!("Characteristic '{}' not found", name))
@@ -359,11 +394,19 @@ fn get_axis_pts(name: String, state: tauri::State<AppState>) -> Result<AxisPtsDa
 
 /// Update an axis points entity's fields by name.
 #[tauri::command]
-fn update_axis_pts(name: String, data: AxisPtsData, state: tauri::State<AppState>) -> Result<(), String> {
+fn update_axis_pts(
+    name: String,
+    data: AxisPtsData,
+    state: tauri::State<AppState>,
+) -> Result<(), String> {
     let mut guard = state.a2l.lock().map_err(|_| "State lock poisoned")?;
     let a2l = guard.as_mut().ok_or("No A2L loaded")?;
 
-    let clean_addr = data.address.trim().trim_start_matches("0x").trim_start_matches("0X");
+    let clean_addr = data
+        .address
+        .trim()
+        .trim_start_matches("0x")
+        .trim_start_matches("0X");
     let new_addr_val = u32::from_str_radix(clean_addr, 16).map_err(|_| "Invalid hex address")?;
 
     for module in a2l.project.module.iter_mut() {
@@ -423,7 +466,10 @@ fn load_elf_symbols(
             Ok(w) => w,
             Err(_) => return,
         };
-        if watcher.watch(&PathBuf::from(&watch_path), RecursiveMode::NonRecursive).is_err() {
+        if watcher
+            .watch(&PathBuf::from(&watch_path), RecursiveMode::NonRecursive)
+            .is_err()
+        {
             return;
         }
 
@@ -454,7 +500,10 @@ fn update_ecu_addresses(
     module_name: Option<String>,
     state: tauri::State<AppState>,
 ) -> Result<UpdateEcuAddressesResult, String> {
-    let elf_symbols = state.elf_symbols_cache.lock().map_err(|_| "Lock poisoned")?;
+    let elf_symbols = state
+        .elf_symbols_cache
+        .lock()
+        .map_err(|_| "Lock poisoned")?;
     if elf_symbols.is_empty() {
         return Err("No ELF symbols loaded".to_string());
     }
@@ -470,10 +519,11 @@ fn update_ecu_addresses(
 fn create_measurements_from_elf(
     module_name: Option<String>,
     symbols: Vec<ElfSymbol>,
-    state: tauri::State<AppState>
+    state: tauri::State<AppState>,
 ) -> Result<EntityUpdateResult, String> {
-    let mapped_symbols: Vec<SymbolWithMapping> = symbols.iter().map(|s| {
-        SymbolWithMapping {
+    let mapped_symbols: Vec<SymbolWithMapping> = symbols
+        .iter()
+        .map(|s| SymbolWithMapping {
             name: s.name.clone(),
             address: s.address,
             a2l_type: s.suggested_a2l_type.clone(),
@@ -484,8 +534,8 @@ fn create_measurements_from_elf(
             accuracy: Some(0.0),
             array_dims: s.array_dims.clone(),
             enum_values: s.enum_values.clone(),
-        }
-    }).collect();
+        })
+        .collect();
 
     create_measurements_with_mapping(module_name, mapped_symbols, state)
 }
@@ -495,7 +545,7 @@ fn create_measurements_from_elf(
 fn check_symbol_conflicts(
     module_name: Option<String>,
     symbols: Vec<SymbolWithMapping>,
-    state: tauri::State<AppState>
+    state: tauri::State<AppState>,
 ) -> Result<ConflictReport, String> {
     let guard = state.a2l.lock().map_err(|_| "State lock poisoned")?;
     let a2l = guard.as_ref().ok_or("No A2L loaded")?;
@@ -507,7 +557,7 @@ fn check_symbol_conflicts(
 fn create_measurements_with_mapping(
     module_name: Option<String>,
     symbols: Vec<SymbolWithMapping>,
-    state: tauri::State<AppState>
+    state: tauri::State<AppState>,
 ) -> Result<EntityUpdateResult, String> {
     let mut guard = state.a2l.lock().map_err(|_| "State lock poisoned")?;
     let a2l = guard.as_mut().ok_or("No A2L loaded")?;
@@ -525,7 +575,7 @@ fn create_measurements_with_mapping(
 fn create_characteristics_from_elf(
     module_name: Option<String>,
     symbols: Vec<SymbolWithMapping>,
-    state: tauri::State<AppState>
+    state: tauri::State<AppState>,
 ) -> Result<EntityUpdateResult, String> {
     let mut guard = state.a2l.lock().map_err(|_| "State lock poisoned")?;
     let a2l = guard.as_mut().ok_or("No A2L loaded")?;
@@ -639,6 +689,8 @@ pub fn run() {
             update_project_metadata,
             export_a2l,
             save_a2l_to_path,
+            save_cli_sync_project,
+            load_cli_sync_project,
             list_core_entities,
             list_a2l_tree,
             update_entity_name,

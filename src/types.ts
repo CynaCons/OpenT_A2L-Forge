@@ -97,3 +97,39 @@ export type ConflictReport = {
   conflicts: SymbolConflict[];
   non_conflicts: string[];
 };
+
+export type CliSyncMissingPolicy = "report" | "prune";
+
+export type CliTrackedSelector =
+  | { kind: "symbol"; name: string }
+  | { kind: "struct_root"; name: string };
+
+export type CliSymbolMappingOverride = {
+  a2l_type: string;
+  lower_limit: number;
+  upper_limit: number;
+  conversion?: string;
+  resolution?: number;
+  accuracy?: number;
+  array_dims?: number[];
+  enum_values?: [string, number][];
+};
+
+export type CliSyncProject = {
+  version: number;
+  a2l_path: string;
+  elf_path: string;
+  module_name?: string | null;
+  output_path?: string | null;
+  selectors: CliTrackedSelector[];
+  mapping_overrides: Record<string, CliSymbolMappingOverride>;
+  missing_policy: CliSyncMissingPolicy;
+};
+
+export type LoadedCliSyncProject = {
+  project_path: string;
+  resolved_a2l_path: string;
+  resolved_elf_path: string;
+  resolved_output_path?: string | null;
+  project: CliSyncProject;
+};

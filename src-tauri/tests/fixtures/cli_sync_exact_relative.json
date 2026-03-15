@@ -1,0 +1,27 @@
+{
+  "version": 1,
+  "a2l_path": "../../../external/a2ltool/fixtures/a2l/from_source.a2l",
+  "elf_path": "../../../external/a2ltool/fixtures/bin/update_test.elf",
+  "module_name": "fragment",
+  "selectors": [
+    {
+      "kind": "symbol",
+      "name": "Characteristic_ValBlk"
+    }
+  ],
+  "mapping_overrides": {
+    "Characteristic_ValBlk": {
+      "a2l_type": "FLOAT32_IEEE",
+      "lower_limit": -5.0,
+      "upper_limit": 5.0,
+      "conversion": "NO_COMPU_METHOD",
+      "resolution": 1,
+      "accuracy": 0.0,
+      "array_dims": [
+        5
+      ],
+      "enum_values": []
+    }
+  },
+  "missing_policy": "report"
+}

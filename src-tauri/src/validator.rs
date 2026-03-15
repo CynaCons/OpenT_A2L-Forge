@@ -56,31 +56,19 @@ pub fn core_validate_a2l(a2l: &a2lfile::A2lFile) -> ValidationResult {
 
     for module in a2l.project.module.iter() {
         // Build lookup sets for cross-reference checks
-        let compu_method_names: HashSet<&str> = module
-            .compu_method
-            .iter()
-            .map(|cm| cm.get_name())
-            .collect();
+        let compu_method_names: HashSet<&str> =
+            module.compu_method.iter().map(|cm| cm.get_name()).collect();
         let record_layout_names: HashSet<&str> = module
             .record_layout
             .iter()
             .map(|rl| rl.get_name())
             .collect();
-        let compu_tab_names: HashSet<&str> = module
-            .compu_tab
-            .iter()
-            .map(|ct| ct.get_name())
-            .collect();
-        let compu_vtab_names: HashSet<&str> = module
-            .compu_vtab
-            .iter()
-            .map(|cv| cv.get_name())
-            .collect();
-        let measurement_names: HashSet<&str> = module
-            .measurement
-            .iter()
-            .map(|m| m.get_name())
-            .collect();
+        let compu_tab_names: HashSet<&str> =
+            module.compu_tab.iter().map(|ct| ct.get_name()).collect();
+        let compu_vtab_names: HashSet<&str> =
+            module.compu_vtab.iter().map(|cv| cv.get_name()).collect();
+        let measurement_names: HashSet<&str> =
+            module.measurement.iter().map(|m| m.get_name()).collect();
 
         // DUP_NAME: check for duplicate names across Measurement/Characteristic/AxisPts
         let mut all_entity_names: HashSet<String> = HashSet::new();

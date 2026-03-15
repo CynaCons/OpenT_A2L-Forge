@@ -1,0 +1,29 @@
+{
+  "version": 1,
+  "a2l_path": "../../../external/a2ltool/fixtures/a2l/from_source_structs.a2l",
+  "elf_path": "../../../external/a2ltool/fixtures/bin/update_typedef_test.elf",
+  "module_name": "fragment",
+  "selectors": [
+    {
+      "kind": "struct_root",
+      "name": "struct_b"
+    },
+    {
+      "kind": "symbol",
+      "name": "struct_b.s1.val_i32"
+    }
+  ],
+  "mapping_overrides": {
+    "struct_b.s1.val_i32": {
+      "a2l_type": "ULONG",
+      "lower_limit": 0.0,
+      "upper_limit": 4294967295.0,
+      "conversion": "NO_COMPU_METHOD",
+      "resolution": 1,
+      "accuracy": 0.0,
+      "array_dims": [],
+      "enum_values": []
+    }
+  },
+  "missing_policy": "report"
+}

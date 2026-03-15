@@ -1,5 +1,6 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
+  "mainBinaryName": "opent_a2l_forge",
   "productName": "OpenT A2L Forge",
   "version": "0.1.0",
   "identifier": "com.opent.a2lforge",

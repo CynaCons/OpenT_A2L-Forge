@@ -3,11 +3,11 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![GitHub Pages](https://img.shields.io/badge/Landing%20Page-Live-brightgreen)](https://cynacons.github.io/OpenT_A2L-Forge/)
 
-A modern, open-source desktop application for viewing, editing, and creating **ASAP2 (A2L)** calibration files with **ELF binary import**. Built with Tauri v2, React, and Rust for native performance.
+A modern, open-source desktop application and build-system CLI for viewing, editing, creating, and syncing **ASAP2 (A2L)** calibration files against **ELF/DWARF** data. Built with Tauri v2, React, and Rust for native performance.
 
 Part of the **OpenTools** series.
 
-**[Landing Page](https://cynacons.github.io/OpenT_A2L-Forge/)** | **[Releases](https://github.com/CynaCons/OpenT_A2L-Forge/releases)** | **[Issues](https://github.com/CynaCons/OpenT_A2L-Forge/issues)**
+**[Landing Page](https://cynacons.github.io/OpenT_A2L-Forge/)** | **[CLI Quickstart](docs/CLI-Quickstart.md)** | **[Releases](https://github.com/CynaCons/OpenT_A2L-Forge/releases)** | **[Issues](https://github.com/CynaCons/OpenT_A2L-Forge/issues)**
 
 ---
 
@@ -30,6 +30,12 @@ Load ELF binaries, browse symbols with filtering by type/section/bind, and inspe
 Select symbols from an ELF binary and import them into your A2L project as Measurements or Characteristics.
 
 ![Import View](docs/screenshots/import-view.png)
+
+### CLI Sync Run
+
+Run a saved sync project headlessly, inspect the machine-readable result, and fail builds safely when tracked A2L content goes stale.
+
+![CLI Sync Run](docs/screenshots/cli-project-view.png)
 
 ### Create Entity Dialog
 
@@ -135,6 +141,16 @@ Supports all standard ASAP2 data types:
 - **Address overflow validation** (warns when addresses exceed 32-bit range)
 - **Auto-create RECORD_LAYOUT** (`__val_TYPE`) with `FNC_VALUES` for Characteristic imports
 
+### CLI Sync for Build Systems
+
+- **Versioned sync-project JSON** saved from the desktop ELF workflow
+- **Track exact leaf symbols or whole struct roots** for repeatable sync scope
+- **Headless sync command** via `opent_a2l_forge_cli sync --project ...`
+- **Machine-readable JSON output** for CI logs and automation
+- **Safe stale-item reporting** with exit code `2` in `report` mode
+- **Optional prune mode** to remove stale managed characteristics and generated enum support objects
+- **Relative path resolution** so sync projects stay portable inside repositories and build trees
+
 ### Live ELF File Watching
 
 - **Automatic detection** of ELF file changes on disk (via `notify` crate)
@@ -199,14 +215,33 @@ npm run tauri dev
 
 # Build release binary
 npm run tauri build
+
+# Build the standalone CLI binary
+npm run cli:build
+
+# Run a sync project headlessly
+cargo run --manifest-path src-tauri/Cargo.toml --features cli --bin opent_a2l_forge_cli -- sync --project path\\to\\project.a2lsync.json --json
 ```
 
-The release output is in `src-tauri/target/release/bundle/`.
+The GUI release output is in `src-tauri/target/release/bundle/`. The CLI binary is built explicitly with `npm run cli:build` and lands at `src-tauri/target/cli-release/release/opent_a2l_forge_cli.exe`.
+
+### CLI Quickstart
+
+1. Open your A2L and ELF in the desktop app.
+2. In the ELF inspector, select exact symbols and/or whole struct roots.
+3. Use **Save Sync Project** to write a versioned JSON config to your repo.
+4. Call the CLI from your build:
+
+```bash
+opent_a2l_forge_cli sync --project firmware.a2lsync.json --missing report --json
+```
+
+Use `--missing report` to fail safely when tracked items disappear, or `--missing prune` to delete stale managed characteristics automatically. See [docs/CLI-Quickstart.md](docs/CLI-Quickstart.md) for the full workflow and JSON schema.
 
 ### Running Tests
 
 ```bash
-# Rust integration tests (34 tests)
+# Rust tests (43 default, 45 with `--features cli`)
 cargo test --manifest-path src-tauri/Cargo.toml
 
 # Playwright E2E tests (requires release binary built first)
@@ -249,13 +284,18 @@ src/
       RecordLayoutEditor.tsx           # RecordLayout create form
 src-tauri/src/
   lib.rs                               # Tauri command wrappers + AppState
+  cli_sync.rs                          # CLI sync project loading + headless sync engine
   types.rs                             # Shared Rust types and traits
   a2l_ops.rs                           # A2L CRUD operations + tree building
   elf_parser.rs                        # ELF/DWARF parsing + type inference
   validator.rs                         # A2L validation engine
-src-tauri/tests/integration.rs         # Rust integration tests (34 tests)
+  bin/
+    opent_a2l_forge_cli.rs             # Standalone CLI binary entrypoint
+src-tauri/tests/integration.rs         # Core Rust integration tests
+src-tauri/tests/cli_sync.rs            # CLI sync integration tests
 tests/e2e/                             # Playwright E2E tests (real binary via CDP)
 external/a2ltool/fixtures/             # A2L and ELF fixture files
+docs/CLI-Quickstart.md                 # User-facing CLI workflow guide
 docs/srs/                              # SRS requirement documents
 docs/landing/                          # GitHub Pages landing page
 ```
@@ -268,7 +308,7 @@ docs/landing/                          # GitHub Pages landing page
 - **Validator UI** -- frontend panel for A2L validation results with click-to-navigate
 - **Broader A2L coverage** -- support for more ASAP2 elements, corner cases, and version-specific features
 - **Broader ELF/DWARF coverage** -- additional architectures, DWARF edge cases, and symbol types
-- **CLI interface** -- command-line tools for batch A2L operations, ELF import, and scripted workflows
+- **CLI sync enhancements** -- richer selector management, diff summaries, and more export formats for automation pipelines
 - **Better A2L editing interface** -- inline editing, drag-and-drop, undo/redo, and autosave
 
 ---

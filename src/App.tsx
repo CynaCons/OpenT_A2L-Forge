@@ -18,8 +18,11 @@ import type {
   A2lTreeItem,
   A2lTreeModule,
   A2lTreeSection,
+  CliSymbolMappingOverride,
+  CliSyncProject,
   ConflictReport,
   ElfSymbol,
+  LoadedCliSyncProject,
   RecentFile,
   StatusState,
   StatusType,
@@ -44,6 +47,7 @@ import { CreateEntityDialog } from "./components/dialogs/CreateEntityDialog";
 
 const RECENT_A2L_KEY = "opent-a2l-recents";
 const RECENT_ELF_KEY = "opent-elf-recents";
+const CLI_SYNC_PROJECT_VERSION = 1;
 
 function App() {
   const [activeView, setActiveView] = useState<"a2l" | "elf" | "settings">("a2l");
@@ -65,6 +69,9 @@ function App() {
   const lastClickedTreeItemRef = useRef<string | null>(null);
   const [elfSymbols, setElfSymbols] = useState<ElfSymbol[]>([]);
   const [selectedElfSymbols, setSelectedElfSymbols] = useState<Set<string>>(new Set());
+  const [trackedStructRoots, setTrackedStructRoots] = useState<Set<string>>(new Set());
+  const [cliProjectOverrides, setCliProjectOverrides] = useState<Record<string, CliSymbolMappingOverride>>({});
+  const [currentCliProjectPath, setCurrentCliProjectPath] = useState<string | null>(null);
   const [elfSearchQuery, setElfSearchQuery] = useState('');
   const [elfFilterTypes, setElfFilterTypes] = useState<Set<string>>(new Set());
   const [elfFilterSections, setElfFilterSections] = useState<Set<string>>(new Set());
@@ -209,6 +216,39 @@ function App() {
   const addressOverflowCount = useMemo(() =>
     elfSymbols.filter(s => s.address_warning).length,
   [elfSymbols]);
+
+  const elfSymbolByName = useMemo(() => {
+    const map = new Map<string, ElfSymbol>();
+    elfSymbols.forEach((symbol) => map.set(symbol.name, symbol));
+    return map;
+  }, [elfSymbols]);
+
+  const mappingToOverride = useCallback((mapping: SymbolWithMapping): CliSymbolMappingOverride => ({
+    a2l_type: mapping.a2l_type,
+    lower_limit: mapping.lower_limit,
+    upper_limit: mapping.upper_limit,
+    conversion: mapping.conversion,
+    resolution: mapping.resolution,
+    accuracy: mapping.accuracy,
+    array_dims: mapping.array_dims || [],
+    enum_values: mapping.enum_values || [],
+  }), []);
+
+  const buildMappingFromSymbol = useCallback((symbol: ElfSymbol): SymbolWithMapping => {
+    const override = cliProjectOverrides[symbol.name];
+    return {
+      name: symbol.name,
+      address: symbol.address,
+      a2l_type: override?.a2l_type ?? symbol.suggested_a2l_type,
+      lower_limit: override?.lower_limit ?? symbol.suggested_limits[0],
+      upper_limit: override?.upper_limit ?? symbol.suggested_limits[1],
+      conversion: override?.conversion ?? "NO_COMPU_METHOD",
+      resolution: override?.resolution ?? 1,
+      accuracy: override?.accuracy ?? 0,
+      array_dims: override?.array_dims ?? symbol.array_dims ?? [],
+      enum_values: override?.enum_values ?? symbol.enum_values ?? [],
+    };
+  }, [cliProjectOverrides]);
 
   // --- Recent files ---
 
@@ -367,6 +407,174 @@ function App() {
 
   // --- Handlers ---
 
+  function toggleLeafSelection(symbolName: string) {
+    const symbol = elfSymbolByName.get(symbolName);
+    const parentStruct = symbol?.parent_struct ?? null;
+    setSelectedElfSymbols((prev) => {
+      const next = new Set(prev);
+      if (next.has(symbolName)) next.delete(symbolName);
+      else next.add(symbolName);
+      return next;
+    });
+    if (parentStruct) {
+      setTrackedStructRoots((prev) => {
+        if (!prev.has(parentStruct)) return prev;
+        const next = new Set(prev);
+        next.delete(parentStruct);
+        return next;
+      });
+    }
+  }
+
+  function setStructRootSelection(rootName: string, checked: boolean) {
+    const members = elfSymbols
+      .filter((symbol) => symbol.parent_struct === rootName)
+      .map((symbol) => symbol.name);
+
+    setSelectedElfSymbols((prev) => {
+      const next = new Set(prev);
+      if (checked) members.forEach((name) => next.add(name));
+      else members.forEach((name) => next.delete(name));
+      return next;
+    });
+    setTrackedStructRoots((prev) => {
+      const next = new Set(prev);
+      if (checked) next.add(rootName);
+      else next.delete(rootName);
+      return next;
+    });
+  }
+
+  function resolveProjectSelection(project: CliSyncProject, symbols: ElfSymbol[]) {
+    const leaves = new Set<string>();
+    const roots = new Set<string>();
+    const symbolNames = new Set(symbols.map((symbol) => symbol.name));
+
+    project.selectors.forEach((selector) => {
+      if (selector.kind === "struct_root") {
+        roots.add(selector.name);
+        symbols
+          .filter((symbol) => symbol.parent_struct === selector.name)
+          .forEach((symbol) => leaves.add(symbol.name));
+      } else if (symbolNames.has(selector.name)) {
+        leaves.add(selector.name);
+      }
+    });
+
+    return { leaves, roots };
+  }
+
+  async function saveCliProjectToPath(projectPath: string) {
+    if (!metadata || !currentFilePath || !currentElfPath) {
+      pushStatus("error", "Load and save an A2L plus load an ELF before saving a sync project.");
+      return;
+    }
+
+    const selectedNames = Array.from(selectedElfSymbols);
+    if (selectedNames.length === 0 && trackedStructRoots.size === 0) {
+      pushStatus("error", "Select at least one symbol or struct root first.");
+      return;
+    }
+
+    const selectors = [
+      ...Array.from(trackedStructRoots).sort().map((name) => ({ kind: "struct_root" as const, name })),
+      ...selectedNames
+        .filter((name) => {
+          const symbol = elfSymbolByName.get(name);
+          return !(symbol?.parent_struct && trackedStructRoots.has(symbol.parent_struct));
+        })
+        .sort()
+        .map((name) => ({ kind: "symbol" as const, name })),
+    ];
+
+    const selectedMappings = selectedNames
+      .map((name) => elfSymbolByName.get(name))
+      .filter((symbol): symbol is ElfSymbol => symbol != null)
+      .map((symbol) => buildMappingFromSymbol(symbol));
+
+    const mapping_overrides = Object.fromEntries(
+      selectedMappings.map((mapping) => [mapping.name, mappingToOverride(mapping)]),
+    );
+
+    const project: CliSyncProject = {
+      version: CLI_SYNC_PROJECT_VERSION,
+      a2l_path: currentFilePath,
+      elf_path: currentElfPath,
+      module_name: selectedModule || metadata.module_names[0] || null,
+      output_path: null,
+      selectors,
+      mapping_overrides,
+      missing_policy: "report",
+    };
+
+    setIsBusy(true);
+    try {
+      await invoke("save_cli_sync_project", { path: projectPath, project });
+      setCurrentCliProjectPath(projectPath);
+      pushStatus("success", `Saved sync project to ${projectPath.split(/[\\/]/).pop()}.`);
+    } catch (error) {
+      pushStatus("error", `Failed to save sync project: ${error}`);
+    } finally {
+      setIsBusy(false);
+    }
+  }
+
+  async function handleSaveCliProject() {
+    const projectPath = currentCliProjectPath || await save({
+      title: "Save CLI Sync Project",
+      defaultPath: `${fileName.replace(/\.a2l$/i, "") || "project"}.a2lsync.json`,
+      filters: [
+        { name: "JSON Files", extensions: ["json"] },
+        { name: "All Files", extensions: ["*"] },
+      ],
+    });
+
+    if (!projectPath) return;
+    await saveCliProjectToPath(projectPath as string);
+  }
+
+  async function loadCliProjectFromPath(projectPath: string) {
+    setIsBusy(true);
+    pushStatus("info", "Loading sync project...", false);
+    try {
+      const loaded = await invoke<LoadedCliSyncProject>("load_cli_sync_project", { path: projectPath });
+      await handleLoadA2lFromPath(loaded.resolved_a2l_path);
+      const symbols = await handleLoadElfFromPath(loaded.resolved_elf_path);
+      const resolvedSelection = resolveProjectSelection(loaded.project, symbols || []);
+      setTrackedStructRoots(resolvedSelection.roots);
+      setSelectedElfSymbols(resolvedSelection.leaves);
+      setCliProjectOverrides(loaded.project.mapping_overrides || {});
+      setSelectedModule(loaded.project.module_name || null);
+      setCurrentCliProjectPath(projectPath);
+      setActiveView("elf");
+      pushStatus("success", `Loaded sync project ${projectPath.split(/[\\/]/).pop()}.`);
+    } catch (error) {
+      pushStatus("error", `Failed to load sync project: ${error}`);
+    } finally {
+      setIsBusy(false);
+    }
+  }
+
+  async function handleOpenCliProjectDialog() {
+    if (isDirty) {
+      setPendingAction(() => () => handleOpenCliProjectDialog());
+      setShowUnsavedDialog(true);
+      return;
+    }
+
+    const projectPath = await open({
+      title: "Open CLI Sync Project",
+      multiple: false,
+      filters: [
+        { name: "JSON Files", extensions: ["json"] },
+        { name: "All Files", extensions: ["*"] },
+      ],
+    });
+
+    if (!projectPath) return;
+    await loadCliProjectFromPath(projectPath as string);
+  }
+
   async function handleUpdateEcuAddresses() {
     if (!metadata || elfSymbols.length === 0) return;
     setIsBusy(true);
@@ -424,6 +632,7 @@ function App() {
     const name = filePath.split(/[\\/]/).pop() || filePath;
     setFileName(name);
     setCurrentFilePath(filePath);
+    setCurrentCliProjectPath(null);
 
     try {
       const result = await invoke<A2lMetadata>("load_a2l_from_path", { path: filePath });
@@ -458,6 +667,7 @@ function App() {
     const contents = `ASAP2_VERSION 1 71\n/begin PROJECT new_project ""\n  /begin MODULE new_module ""\n  /end MODULE\n/end PROJECT`;
     setFileName("new_project.a2l");
     setCurrentFilePath(null);
+    setCurrentCliProjectPath(null);
     try {
       const result = await invoke<A2lMetadata>("load_a2l_from_string", { contents });
       setMetadata(result);
@@ -560,7 +770,7 @@ function App() {
     }
   }
 
-  async function handleLoadElfFromPath(filePath: string) {
+  async function handleLoadElfFromPath(filePath: string): Promise<ElfSymbol[]> {
     setIsBusy(true);
     pushStatus("info", "Loading ELF symbols...", false);
 
@@ -572,15 +782,20 @@ function App() {
       const symbols = await invoke<ElfSymbol[]>("load_elf_symbols", { path: filePath });
       setElfSymbols(symbols);
       setSelectedElfSymbols(new Set());
+      setTrackedStructRoots(new Set());
+      setCliProjectOverrides({});
+      setCurrentCliProjectPath(null);
 
       addRecentFile(RECENT_ELF_KEY, recentElfFiles, setRecentElfFiles, {
         name: elfName, path: filePath, lastOpened: Date.now(),
       });
 
       pushStatus("success", `Loaded ${symbols.length} symbols.`);
+      return symbols;
     } catch (e) {
       pushStatus("error", `ELF load failed: ${e}`);
       setElfSymbols([]);
+      return [];
     } finally {
       setIsBusy(false);
     }
@@ -594,21 +809,21 @@ function App() {
     }
 
     const toAdd = elfDisplayRows.filter(s => selectedElfSymbols.has(s.name));
-    const symbolsWithMapping: SymbolWithMapping[] = toAdd.map(s => ({
-      name: s.name,
-      address: s.address,
-      a2l_type: s.suggested_a2l_type,
-      lower_limit: s.suggested_limits[0],
-      upper_limit: s.suggested_limits[1],
-      conversion: "NO_COMPU_METHOD",
-      resolution: 1,
-      accuracy: 0,
-      array_dims: s.array_dims || [],
-      enum_values: s.enum_values || [],
-    }));
+    const symbolsWithMapping: SymbolWithMapping[] = toAdd.map((symbol) => buildMappingFromSymbol(symbol));
 
     setPreviewMeasurements(symbolsWithMapping);
     setShowPreviewDialog(true);
+  }
+
+  function handlePreviewMeasurementsChange(measurements: SymbolWithMapping[]) {
+    setPreviewMeasurements(measurements);
+    setCliProjectOverrides((prev) => {
+      const next = { ...prev };
+      measurements.forEach((measurement) => {
+        next[measurement.name] = mappingToOverride(measurement);
+      });
+      return next;
+    });
   }
 
   async function handleConfirmPreview() {
@@ -772,6 +987,8 @@ function App() {
       loadA2lFromPath: handleLoadA2lFromPath,
       loadElfFromPath: handleLoadElfFromPath,
       createA2l: handleCreateA2l,
+      loadCliProjectFromPath,
+      saveCliProjectToPath,
     };
     return () => { delete (window as any).__E2E__; };
   });
@@ -878,7 +1095,12 @@ function App() {
               selectableDisplayRows={selectableDisplayRows}
               structParentNames={structParentNames}
               selectedElfSymbols={selectedElfSymbols}
-              onSelectedElfSymbolsChange={setSelectedElfSymbols}
+              onSelectedElfSymbolsChange={(symbols) => {
+                setSelectedElfSymbols(symbols);
+                setTrackedStructRoots(new Set());
+              }}
+              onToggleElfSymbol={toggleLeafSelection}
+              onSetStructRootSelection={setStructRootSelection}
               collapsedStructs={collapsedStructs}
               onCollapsedStructsChange={setCollapsedStructs}
               elfSearchQuery={elfSearchQuery}
@@ -905,6 +1127,9 @@ function App() {
               onDismissElfBanner={() => setElfChangedBanner(false)}
               onReloadElf={handleReloadElf}
               onUpdateEcuAddresses={handleUpdateEcuAddresses}
+              onLoadCliProject={handleOpenCliProjectDialog}
+              onSaveCliProject={handleSaveCliProject}
+              canSaveCliProject={!!metadata && !!currentFilePath && !!currentElfPath && (selectedElfSymbols.size > 0 || trackedStructRoots.size > 0)}
               onAddSymbols={handleAddSymbols}
             />
           ) : (
@@ -936,7 +1161,7 @@ function App() {
         <PreviewDialog
           open={showPreviewDialog}
           measurements={previewMeasurements}
-          onMeasurementsChange={setPreviewMeasurements}
+          onMeasurementsChange={handlePreviewMeasurementsChange}
           onClose={() => setShowPreviewDialog(false)}
           onConfirm={handleConfirmPreview}
         />

@@ -217,20 +217,14 @@ pub fn build_tree(a2l: &a2lfile::A2lFile) -> A2lTree {
             ) {
                 sections.push(section);
             }
-            if let Some(section) = build_section_from_list(
-                module_name,
-                "Compu Tables",
-                "CompuTab",
-                &module.compu_tab,
-            ) {
+            if let Some(section) =
+                build_section_from_list(module_name, "Compu Tables", "CompuTab", &module.compu_tab)
+            {
                 sections.push(section);
             }
-            if let Some(section) = build_section_from_list(
-                module_name,
-                "Compu VTabs",
-                "CompuVtab",
-                &module.compu_vtab,
-            ) {
+            if let Some(section) =
+                build_section_from_list(module_name, "Compu VTabs", "CompuVtab", &module.compu_vtab)
+            {
                 sections.push(section);
             }
             if let Some(section) = build_section_from_list(
@@ -351,12 +345,9 @@ pub fn build_tree(a2l: &a2lfile::A2lFile) -> A2lTree {
             ) {
                 sections.push(section);
             }
-            if let Some(section) = build_section_from_optional(
-                module_name,
-                "A2ML",
-                "A2ML",
-                module.a2ml.as_ref(),
-            ) {
+            if let Some(section) =
+                build_section_from_optional(module_name, "A2ML", "A2ML", module.a2ml.as_ref())
+            {
                 sections.push(section);
             }
             if let Some(section) =
@@ -528,11 +519,7 @@ fn record_layout_name_for_type(a2l_type: &str) -> String {
 /// Ensure a record layout exists for the given A2L type; create if missing.
 pub fn ensure_record_layout(module: &mut a2lfile::Module, a2l_type: &str) {
     let rl_name = record_layout_name_for_type(a2l_type);
-    if module
-        .record_layout
-        .iter()
-        .any(|r| r.get_name() == rl_name)
-    {
+    if module.record_layout.iter().any(|r| r.get_name() == rl_name) {
         return;
     }
     let data_type = parse_data_type(a2l_type);
@@ -656,10 +643,7 @@ pub fn core_check_conflicts(
             .find(|m| m.get_name() == name)
             .ok_or(format!("Module {} not found", name))?
     } else {
-        a2l.project
-            .module
-            .first()
-            .ok_or("No modules in project")?
+        a2l.project.module.first().ok_or("No modules in project")?
     };
 
     let mut conflicts = Vec::new();
@@ -832,10 +816,7 @@ pub fn core_update_ecu_addresses(
 // ─── Entity deletion ────────────────────────────────────────────────────────
 
 /// Delete entities from the A2L file. Returns the number of entities deleted.
-pub fn core_delete_entities(
-    a2l: &mut a2lfile::A2lFile,
-    entities: &[DeleteEntityRequest],
-) -> usize {
+pub fn core_delete_entities(a2l: &mut a2lfile::A2lFile, entities: &[DeleteEntityRequest]) -> usize {
     let mut deleted = 0usize;
     for module in a2l.project.module.iter_mut() {
         for req in entities {
@@ -843,65 +824,47 @@ pub fn core_delete_entities(
             match req.kind.as_str() {
                 "Measurement" => {
                     before = module.measurement.len();
-                    module
-                        .measurement
-                        .retain(|m| m.get_name() != req.name);
+                    module.measurement.retain(|m| m.get_name() != req.name);
                     deleted += before - module.measurement.len();
                 }
                 "Characteristic" => {
                     before = module.characteristic.len();
-                    module
-                        .characteristic
-                        .retain(|c| c.get_name() != req.name);
+                    module.characteristic.retain(|c| c.get_name() != req.name);
                     deleted += before - module.characteristic.len();
                 }
                 "AxisPts" => {
                     before = module.axis_pts.len();
-                    module
-                        .axis_pts
-                        .retain(|a| a.get_name() != req.name);
+                    module.axis_pts.retain(|a| a.get_name() != req.name);
                     deleted += before - module.axis_pts.len();
                 }
                 "CompuMethod" => {
                     before = module.compu_method.len();
-                    module
-                        .compu_method
-                        .retain(|c| c.get_name() != req.name);
+                    module.compu_method.retain(|c| c.get_name() != req.name);
                     deleted += before - module.compu_method.len();
                 }
                 "CompuTab" => {
                     before = module.compu_tab.len();
-                    module
-                        .compu_tab
-                        .retain(|c| c.get_name() != req.name);
+                    module.compu_tab.retain(|c| c.get_name() != req.name);
                     deleted += before - module.compu_tab.len();
                 }
                 "CompuVtab" => {
                     before = module.compu_vtab.len();
-                    module
-                        .compu_vtab
-                        .retain(|c| c.get_name() != req.name);
+                    module.compu_vtab.retain(|c| c.get_name() != req.name);
                     deleted += before - module.compu_vtab.len();
                 }
                 "CompuVtabRange" => {
                     before = module.compu_vtab_range.len();
-                    module
-                        .compu_vtab_range
-                        .retain(|c| c.get_name() != req.name);
+                    module.compu_vtab_range.retain(|c| c.get_name() != req.name);
                     deleted += before - module.compu_vtab_range.len();
                 }
                 "RecordLayout" => {
                     before = module.record_layout.len();
-                    module
-                        .record_layout
-                        .retain(|r| r.get_name() != req.name);
+                    module.record_layout.retain(|r| r.get_name() != req.name);
                     deleted += before - module.record_layout.len();
                 }
                 "Function" => {
                     before = module.function.len();
-                    module
-                        .function
-                        .retain(|f| f.get_name() != req.name);
+                    module.function.retain(|f| f.get_name() != req.name);
                     deleted += before - module.function.len();
                 }
                 "Group" => {
@@ -926,30 +889,22 @@ pub fn core_delete_entities(
                 }
                 "Instance" => {
                     before = module.instance.len();
-                    module
-                        .instance
-                        .retain(|i| i.get_name() != req.name);
+                    module.instance.retain(|i| i.get_name() != req.name);
                     deleted += before - module.instance.len();
                 }
                 "Transformer" => {
                     before = module.transformer.len();
-                    module
-                        .transformer
-                        .retain(|t| t.get_name() != req.name);
+                    module.transformer.retain(|t| t.get_name() != req.name);
                     deleted += before - module.transformer.len();
                 }
                 "TypedefAxis" => {
                     before = module.typedef_axis.len();
-                    module
-                        .typedef_axis
-                        .retain(|t| t.get_name() != req.name);
+                    module.typedef_axis.retain(|t| t.get_name() != req.name);
                     deleted += before - module.typedef_axis.len();
                 }
                 "TypedefBlob" => {
                     before = module.typedef_blob.len();
-                    module
-                        .typedef_blob
-                        .retain(|t| t.get_name() != req.name);
+                    module.typedef_blob.retain(|t| t.get_name() != req.name);
                     deleted += before - module.typedef_blob.len();
                 }
                 "TypedefCharacteristic" => {
@@ -1011,9 +966,18 @@ pub fn core_create_measurement_manual(
     let target_module = find_module_mut(a2l, module_name)?;
 
     // Reject duplicate names
-    if target_module.measurement.iter().any(|m| m.get_name() == data.name)
-        || target_module.characteristic.iter().any(|c| c.get_name() == data.name)
-        || target_module.axis_pts.iter().any(|a| a.get_name() == data.name)
+    if target_module
+        .measurement
+        .iter()
+        .any(|m| m.get_name() == data.name)
+        || target_module
+            .characteristic
+            .iter()
+            .any(|c| c.get_name() == data.name)
+        || target_module
+            .axis_pts
+            .iter()
+            .any(|a| a.get_name() == data.name)
     {
         return Err(format!("Entity '{}' already exists in module", data.name));
     }
@@ -1034,7 +998,10 @@ pub fn core_create_measurement_manual(
 
     if let Some(ref addr_str) = data.ecu_address {
         if !addr_str.trim().is_empty() {
-            let clean = addr_str.trim().trim_start_matches("0x").trim_start_matches("0X");
+            let clean = addr_str
+                .trim()
+                .trim_start_matches("0x")
+                .trim_start_matches("0X");
             let addr_val = u32::from_str_radix(clean, 16).map_err(|_| "Invalid hex address")?;
             m.ecu_address = Some(a2lfile::EcuAddress::new(addr_val));
         }
@@ -1053,9 +1020,18 @@ pub fn core_create_characteristic_manual(
     let target_module = find_module_mut(a2l, module_name)?;
 
     // Reject duplicate names
-    if target_module.measurement.iter().any(|m| m.get_name() == data.name)
-        || target_module.characteristic.iter().any(|c| c.get_name() == data.name)
-        || target_module.axis_pts.iter().any(|a| a.get_name() == data.name)
+    if target_module
+        .measurement
+        .iter()
+        .any(|m| m.get_name() == data.name)
+        || target_module
+            .characteristic
+            .iter()
+            .any(|c| c.get_name() == data.name)
+        || target_module
+            .axis_pts
+            .iter()
+            .any(|a| a.get_name() == data.name)
     {
         return Err(format!("Entity '{}' already exists in module", data.name));
     }
@@ -1063,7 +1039,11 @@ pub fn core_create_characteristic_manual(
     let char_type = string_to_characteristic_type(&data.characteristic_type)
         .ok_or_else(|| format!("Invalid characteristic type: {}", data.characteristic_type))?;
 
-    let clean_addr = data.address.trim().trim_start_matches("0x").trim_start_matches("0X");
+    let clean_addr = data
+        .address
+        .trim()
+        .trim_start_matches("0x")
+        .trim_start_matches("0X");
     let addr_val = u32::from_str_radix(clean_addr, 16).map_err(|_| "Invalid hex address")?;
 
     let new_bit_mask = match &data.bit_mask {
@@ -1101,14 +1081,27 @@ pub fn core_create_axis_pts_manual(
     let target_module = find_module_mut(a2l, module_name)?;
 
     // Reject duplicate names
-    if target_module.measurement.iter().any(|m| m.get_name() == data.name)
-        || target_module.characteristic.iter().any(|c| c.get_name() == data.name)
-        || target_module.axis_pts.iter().any(|a| a.get_name() == data.name)
+    if target_module
+        .measurement
+        .iter()
+        .any(|m| m.get_name() == data.name)
+        || target_module
+            .characteristic
+            .iter()
+            .any(|c| c.get_name() == data.name)
+        || target_module
+            .axis_pts
+            .iter()
+            .any(|a| a.get_name() == data.name)
     {
         return Err(format!("Entity '{}' already exists in module", data.name));
     }
 
-    let clean_addr = data.address.trim().trim_start_matches("0x").trim_start_matches("0X");
+    let clean_addr = data
+        .address
+        .trim()
+        .trim_start_matches("0x")
+        .trim_start_matches("0X");
     let addr_val = u32::from_str_radix(clean_addr, 16).map_err(|_| "Invalid hex address")?;
 
     let a = a2lfile::AxisPts::new(
@@ -1136,7 +1129,11 @@ pub fn core_create_compu_method(
 ) -> Result<(), String> {
     let target_module = find_module_mut(a2l, module_name)?;
 
-    if target_module.compu_method.iter().any(|cm| cm.get_name() == data.name) {
+    if target_module
+        .compu_method
+        .iter()
+        .any(|cm| cm.get_name() == data.name)
+    {
         return Err(format!("CompuMethod '{}' already exists", data.name));
     }
 
@@ -1181,7 +1178,11 @@ pub fn core_create_compu_vtab(
 ) -> Result<(), String> {
     let target_module = find_module_mut(a2l, module_name)?;
 
-    if target_module.compu_vtab.iter().any(|cv| cv.get_name() == data.name) {
+    if target_module
+        .compu_vtab
+        .iter()
+        .any(|cv| cv.get_name() == data.name)
+    {
         return Err(format!("CompuVtab '{}' already exists", data.name));
     }
 
@@ -1193,7 +1194,8 @@ pub fn core_create_compu_vtab(
     );
 
     for (val, label) in &data.value_pairs {
-        vtab.value_pairs.push(a2lfile::ValuePairsStruct::new(*val, label.clone()));
+        vtab.value_pairs
+            .push(a2lfile::ValuePairsStruct::new(*val, label.clone()));
     }
 
     if let Some(ref default) = data.default_value {
@@ -1212,7 +1214,11 @@ pub fn core_create_record_layout(
 ) -> Result<(), String> {
     let target_module = find_module_mut(a2l, module_name)?;
 
-    if target_module.record_layout.iter().any(|rl| rl.get_name() == data.name) {
+    if target_module
+        .record_layout
+        .iter()
+        .any(|rl| rl.get_name() == data.name)
+    {
         return Err(format!("RecordLayout '{}' already exists", data.name));
     }
 

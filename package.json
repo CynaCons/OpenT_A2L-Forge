@@ -6,6 +6,7 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc && vite build",
+    "cli:build": "cargo build --manifest-path src-tauri/Cargo.toml --target-dir src-tauri/target/cli-release --release --features cli --bin opent_a2l_forge_cli",
     "preview": "vite preview",
     "tauri": "tauri",
     "e2e": "playwright test",
