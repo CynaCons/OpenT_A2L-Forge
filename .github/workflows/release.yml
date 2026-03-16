@@ -24,15 +24,15 @@ jobs:
           - platform: macos-latest
             target: aarch64-apple-darwin
             artifact_name: macos-arm64
-          - platform: macos-13
-            target: x86_64-apple-darwin
-            artifact_name: macos-x64
 
     runs-on: ${{ matrix.platform }}
     steps:
       - uses: actions/checkout@v4
-        with:
-          submodules: recursive
+
+      - name: Initialize submodules
+        run: |
+          git submodule init
+          git submodule update --recursive
 
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable
