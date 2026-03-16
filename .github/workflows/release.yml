@@ -64,7 +64,7 @@ jobs:
             libjavascriptcoregtk-4.1-dev
 
       - name: Build Tauri app
-        run: npx tauri build --bundles none
+        run: npx tauri build --no-bundle
         env:
           CI: true
 
