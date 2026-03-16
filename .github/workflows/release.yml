@@ -1,0 +1,122 @@
+name: Build & Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: windows-latest
+            target: x86_64-pc-windows-msvc
+            artifact_name: windows-x64
+          - platform: ubuntu-22.04
+            target: x86_64-unknown-linux-gnu
+            artifact_name: linux-x64
+          - platform: macos-latest
+            target: aarch64-apple-darwin
+            artifact_name: macos-arm64
+          - platform: macos-13
+            target: x86_64-apple-darwin
+            artifact_name: macos-x64
+
+    runs-on: ${{ matrix.platform }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+
+      - name: Rust cache
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install frontend dependencies
+        run: npm ci
+
+      # Linux-specific system dependencies for Tauri
+      - name: Install Linux dependencies
+        if: matrix.platform == 'ubuntu-22.04'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libwebkit2gtk-4.1-dev \
+            libappindicator3-dev \
+            librsvg2-dev \
+            patchelf \
+            libgtk-3-dev \
+            libsoup-3.0-dev \
+            javascriptcoregtk-4.1 \
+            libjavascriptcoregtk-4.1-dev
+
+      - name: Build Tauri app
+        uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAURI_SIGNING_PRIVATE_KEY: ''
+        with:
+          tagName: ${{ github.ref_name }}
+          releaseName: 'OpenT A2L Forge ${{ github.ref_name }}'
+          releaseBody: 'See the assets below to download the installer for your platform.'
+          releaseDraft: false
+          prerelease: false
+          includeUpdaterJson: false
+
+      # Also zip the raw executable for portable use
+      - name: Package portable binary (Windows)
+        if: matrix.platform == 'windows-latest'
+        shell: pwsh
+        run: |
+          $version = "${{ github.ref_name }}" -replace '^v', ''
+          $binDir = "src-tauri/target/release"
+          $zipName = "OpenT-A2L-Forge_${version}_windows-x64-portable.zip"
+          Compress-Archive -Path "$binDir/opent_a2l_forge.exe" -DestinationPath $zipName
+          echo "PORTABLE_ZIP=$zipName" >> $env:GITHUB_ENV
+
+      - name: Package portable binary (Linux)
+        if: matrix.platform == 'ubuntu-22.04'
+        run: |
+          VERSION="${{ github.ref_name }}"
+          VERSION="${VERSION#v}"
+          BIN_DIR="src-tauri/target/release"
+          ZIP_NAME="OpenT-A2L-Forge_${VERSION}_linux-x64-portable.tar.gz"
+          tar -czf "$ZIP_NAME" -C "$BIN_DIR" opent_a2l_forge
+          echo "PORTABLE_ZIP=$ZIP_NAME" >> $GITHUB_ENV
+
+      - name: Package portable binary (macOS)
+        if: startsWith(matrix.platform, 'macos')
+        run: |
+          VERSION="${{ github.ref_name }}"
+          VERSION="${VERSION#v}"
+          BIN_DIR="src-tauri/target/release"
+          ARCH="${{ matrix.artifact_name }}"
+          ZIP_NAME="OpenT-A2L-Forge_${VERSION}_${ARCH}-portable.tar.gz"
+          tar -czf "$ZIP_NAME" -C "$BIN_DIR" opent_a2l_forge
+          echo "PORTABLE_ZIP=$ZIP_NAME" >> $GITHUB_ENV
+
+      - name: Upload portable binary to release
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: ${{ env.PORTABLE_ZIP }}
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
