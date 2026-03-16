@@ -16,13 +16,10 @@ jobs:
       matrix:
         include:
           - platform: windows-latest
-            target: x86_64-pc-windows-msvc
             artifact_name: windows-x64
           - platform: ubuntu-22.04
-            target: x86_64-unknown-linux-gnu
             artifact_name: linux-x64
           - platform: macos-latest
-            target: aarch64-apple-darwin
             artifact_name: macos-arm64
 
     runs-on: ${{ matrix.platform }}
@@ -36,8 +33,6 @@ jobs:
 
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable
-        with:
-          targets: ${{ matrix.target }}
 
       - name: Rust cache
         uses: Swatinem/rust-cache@v2
@@ -47,13 +42,13 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 22
           cache: npm
 
       - name: Install frontend dependencies
         run: npm ci
 
-      # Linux-specific system dependencies for Tauri
+      # Linux-specific system dependencies for Tauri v2
       - name: Install Linux dependencies
         if: matrix.platform == 'ubuntu-22.04'
         run: |
@@ -69,28 +64,20 @@ jobs:
             libjavascriptcoregtk-4.1-dev
 
       - name: Build Tauri app
-        uses: tauri-apps/tauri-action@v0
+        run: npx tauri build --bundles none
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          TAURI_SIGNING_PRIVATE_KEY: ''
-        with:
-          tagName: ${{ github.ref_name }}
-          releaseName: 'OpenT A2L Forge ${{ github.ref_name }}'
-          releaseBody: 'See the assets below to download the installer for your platform.'
-          releaseDraft: false
-          prerelease: false
-          includeUpdaterJson: false
+          CI: true
 
-      # Also zip the raw executable for portable use
+      # Package portable binary
       - name: Package portable binary (Windows)
         if: matrix.platform == 'windows-latest'
         shell: pwsh
         run: |
           $version = "${{ github.ref_name }}" -replace '^v', ''
           $binDir = "src-tauri/target/release"
-          $zipName = "OpenT-A2L-Forge_${version}_windows-x64-portable.zip"
+          $zipName = "OpenT-A2L-Forge_${version}_windows-x64.zip"
           Compress-Archive -Path "$binDir/opent_a2l_forge.exe" -DestinationPath $zipName
-          echo "PORTABLE_ZIP=$zipName" >> $env:GITHUB_ENV
+          echo "ARTIFACT=$zipName" >> $env:GITHUB_ENV
 
       - name: Package portable binary (Linux)
         if: matrix.platform == 'ubuntu-22.04'
@@ -98,9 +85,9 @@ jobs:
           VERSION="${{ github.ref_name }}"
           VERSION="${VERSION#v}"
           BIN_DIR="src-tauri/target/release"
-          ZIP_NAME="OpenT-A2L-Forge_${VERSION}_linux-x64-portable.tar.gz"
+          ZIP_NAME="OpenT-A2L-Forge_${VERSION}_linux-x64.tar.gz"
           tar -czf "$ZIP_NAME" -C "$BIN_DIR" opent_a2l_forge
-          echo "PORTABLE_ZIP=$ZIP_NAME" >> $GITHUB_ENV
+          echo "ARTIFACT=$ZIP_NAME" >> $GITHUB_ENV
 
       - name: Package portable binary (macOS)
         if: startsWith(matrix.platform, 'macos')
@@ -109,14 +96,45 @@ jobs:
           VERSION="${VERSION#v}"
           BIN_DIR="src-tauri/target/release"
           ARCH="${{ matrix.artifact_name }}"
-          ZIP_NAME="OpenT-A2L-Forge_${VERSION}_${ARCH}-portable.tar.gz"
+          ZIP_NAME="OpenT-A2L-Forge_${VERSION}_${ARCH}.tar.gz"
           tar -czf "$ZIP_NAME" -C "$BIN_DIR" opent_a2l_forge
-          echo "PORTABLE_ZIP=$ZIP_NAME" >> $GITHUB_ENV
+          echo "ARTIFACT=$ZIP_NAME" >> $GITHUB_ENV
 
-      - name: Upload portable binary to release
-        if: startsWith(github.ref, 'refs/tags/v')
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.artifact_name }}
+          path: ${{ env.ARTIFACT }}
+
+  release:
+    needs: build
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/v')
+    steps:
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+          merge-multiple: true
+
+      - name: List artifacts
+        run: find artifacts -type f || ls -R artifacts
+
+      - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
-          files: ${{ env.PORTABLE_ZIP }}
+          name: 'OpenT A2L Forge ${{ github.ref_name }}'
+          body: |
+            ## OpenT A2L Forge ${{ github.ref_name }}
+
+            ### Downloads
+            | Platform | File |
+            |----------|------|
+            | Windows x64 | `.zip` — extract and run `opent_a2l_forge.exe` |
+            | Linux x64 | `.tar.gz` — extract and run `./opent_a2l_forge` |
+            | macOS ARM64 | `.tar.gz` — extract and run `./opent_a2l_forge` |
+          files: artifacts/*
+          draft: false
+          prerelease: false
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
