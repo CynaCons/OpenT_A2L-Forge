@@ -437,3 +437,11 @@ Iteration 5.2 — Recursive Nested Structure Support
 - [x] Added `docs/screenshots/cli-project-view.png` plus a reproducible `scripts/generate-cli-doc-screenshot.mjs` renderer for the CLI run screenshot
 - [x] Isolated the standalone CLI build behind the Cargo `cli` feature and a separate `src-tauri/target/cli-release` output so Tauri GUI bundles no longer collide with the CLI artifact
 - [x] Verification: `npm run build`, `npm run tauri build`, `npm run dev` smoke start
+
+## Iteration 5.5 — GitHub Actions Release Pipeline
+- [x] Created `.github/workflows/release.yml` for automated cross-platform builds on tag push
+- [x] Builds Windows (x64), Linux (x64), macOS (ARM64) portable binaries
+- [x] Packages executables as `.zip`/`.tar.gz` and uploads to GitHub Releases
+- [x] Fixed stale `.claude/worktrees/` tracked in git, added to `.gitignore`
+- [x] Released v0.1.0 with all 3 platform binaries on GitHub Releases
+- [x] Verification: `npx tauri build --no-bundle`, GitHub Actions Run #4 succeeded, release at github.com/CynaCons/OpenT_A2L-Forge/releases/tag/v0.1.0
