@@ -68,6 +68,9 @@ jobs:
         env:
           CI: true
 
+      - name: Build CLI binary
+        run: cargo build --manifest-path src-tauri/Cargo.toml --release --features cli --bin opent_a2l_forge_cli
+
       # Package portable binary
       - name: Package portable binary (Windows)
         if: matrix.platform == 'windows-latest'
@@ -76,7 +79,7 @@ jobs:
           $version = "${{ github.ref_name }}" -replace '^v', ''
           $binDir = "src-tauri/target/release"
           $zipName = "OpenT-A2L-Forge_${version}_windows-x64.zip"
-          Compress-Archive -Path "$binDir/opent_a2l_forge.exe" -DestinationPath $zipName
+          Compress-Archive -Path "$binDir/opent_a2l_forge.exe","$binDir/opent_a2l_forge_cli.exe" -DestinationPath $zipName
           echo "ARTIFACT=$zipName" >> $env:GITHUB_ENV
 
       - name: Package portable binary (Linux)
@@ -86,7 +89,7 @@ jobs:
           VERSION="${VERSION#v}"
           BIN_DIR="src-tauri/target/release"
           ZIP_NAME="OpenT-A2L-Forge_${VERSION}_linux-x64.tar.gz"
-          tar -czf "$ZIP_NAME" -C "$BIN_DIR" opent_a2l_forge
+          tar -czf "$ZIP_NAME" -C "$BIN_DIR" opent_a2l_forge opent_a2l_forge_cli
           echo "ARTIFACT=$ZIP_NAME" >> $GITHUB_ENV
 
       - name: Package portable binary (macOS)
@@ -97,7 +100,7 @@ jobs:
           BIN_DIR="src-tauri/target/release"
           ARCH="${{ matrix.artifact_name }}"
           ZIP_NAME="OpenT-A2L-Forge_${VERSION}_${ARCH}.tar.gz"
-          tar -czf "$ZIP_NAME" -C "$BIN_DIR" opent_a2l_forge
+          tar -czf "$ZIP_NAME" -C "$BIN_DIR" opent_a2l_forge opent_a2l_forge_cli
           echo "ARTIFACT=$ZIP_NAME" >> $GITHUB_ENV
 
       - name: Upload artifact
@@ -130,9 +133,14 @@ jobs:
             ### Downloads
             | Platform | File |
             |----------|------|
-            | Windows x64 | `.zip` — extract and run `opent_a2l_forge.exe` |
-            | Linux x64 | `.tar.gz` — extract and run `./opent_a2l_forge` |
-            | macOS ARM64 | `.tar.gz` — extract and run `./opent_a2l_forge` |
+            | Windows x64 | `.zip` — extract and run `opent_a2l_forge.exe` (GUI) or `opent_a2l_forge_cli.exe` (CLI) |
+            | Linux x64 | `.tar.gz` — extract and run `./opent_a2l_forge` (GUI) or `./opent_a2l_forge_cli` (CLI) |
+            | macOS ARM64 | `.tar.gz` — extract and run `./opent_a2l_forge` (GUI) or `./opent_a2l_forge_cli` (CLI) |
+
+            ### CLI Usage
+            ```
+            opent_a2l_forge_cli sync --project <project.json> [--output <file.a2l>] [--missing report|prune] [--json]
+            ```
           files: artifacts/*
           draft: false
           prerelease: false
