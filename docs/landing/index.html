@@ -5,6 +5,15 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>OpenT A2L-Forge — A2L Editor and CLI Sync</title>
   <meta name="description" content="Open-source desktop editor and build-system CLI for ASAP2/A2L calibration files with ELF and DWARF sync. Built with Tauri, React, and Rust.">
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='6' fill='%231e1e1e'/%3E%3Cpath d='M9 22V10h3.2l3.8 7 3.8-7H23v12h-3v-6.8L16.8 20h-1.6L12 15.2V22z' fill='%233794ff'/%3E%3C/svg%3E">
+  <meta property="og:type" content="website">
+  <meta property="og:title" content="OpenT A2L-Forge — A2L Editor and CLI Sync">
+  <meta property="og:description" content="Open-source desktop editor and build-system CLI for ASAP2/A2L calibration files with ELF and DWARF sync.">
+  <meta property="og:url" content="https://cynacons.github.io/OpenT_A2L-Forge/">
+  <meta property="og:image" content="https://cynacons.github.io/OpenT_A2L-Forge/screenshots/a2l-view.png">
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="OpenT A2L-Forge — A2L Editor and CLI Sync">
+  <meta name="twitter:description" content="Open-source desktop editor and build-system CLI for ASAP2/A2L calibration files with ELF and DWARF sync.">
   <link rel="stylesheet" href="style.css">
 </head>
 <body>
@@ -63,15 +72,15 @@ exit code: 2
     <h2>See It in Action</h2>
     <div class="screenshot-grid">
       <div class="screenshot-card">
-        <img src="https://raw.githubusercontent.com/CynaCons/OpenT_A2L-Forge/master/docs/screenshots/a2l-view.png" alt="A2L Entity Browser" loading="lazy">
+        <img src="screenshots/a2l-view.png" alt="A2L Entity Browser" loading="lazy">
         <p>Browse and edit A2L entities with a VS Code-inspired interface</p>
       </div>
       <div class="screenshot-card">
-        <img src="https://raw.githubusercontent.com/CynaCons/OpenT_A2L-Forge/master/docs/screenshots/import-view.png" alt="ELF import workflow" loading="lazy">
+        <img src="screenshots/import-view.png" alt="ELF import workflow" loading="lazy">
         <p>Preview ELF imports with inferred A2L types before applying changes to the project</p>
       </div>
       <div class="screenshot-card">
-        <img src="https://raw.githubusercontent.com/CynaCons/OpenT_A2L-Forge/master/docs/screenshots/cli-project-view.png" alt="CLI sync run output" loading="lazy">
+        <img src="screenshots/cli-project-view.png" alt="CLI sync run output" loading="lazy">
         <p>Run sync projects in your build and inspect JSON output with safe stale-item reporting</p>
       </div>
     </div>
@@ -92,7 +101,7 @@ exit code: 2
         </div>
         <div>
           <strong>3. Run the CLI</strong>
-          <span>Use `report` for safe build failures or `prune` to remove stale tracked items.</span>
+          <span>Use <code>report</code> for safe build failures or <code>prune</code> to remove stale tracked items.</span>
         </div>
       </div>
     </div>
@@ -113,7 +122,7 @@ exit code: 2
       </div>
       <div class="feature-card">
         <h3>CLI Sync Projects</h3>
-        <p>Save versioned sync-project JSON files from the GUI and run repeatable `opent_a2l_forge_cli sync --project ...` updates in your build system.</p>
+        <p>Save versioned sync-project JSON files from the GUI and run repeatable <code>opent_a2l_forge_cli sync --project ...</code> updates in your build system.</p>
       </div>
       <div class="feature-card">
         <h3>Manual Entity Creation</h3>

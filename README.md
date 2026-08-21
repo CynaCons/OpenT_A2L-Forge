@@ -9,6 +9,18 @@ Part of the **OpenTools** series.
 
 **[Landing Page](https://cynacons.github.io/OpenT_A2L-Forge/)** | **[CLI Quickstart](docs/CLI-Quickstart.md)** | **[Releases](https://github.com/CynaCons/OpenT_A2L-Forge/releases)** | **[Issues](https://github.com/CynaCons/OpenT_A2L-Forge/issues)**
 
+## Download
+
+Grab the latest portable binaries from [Releases](https://github.com/CynaCons/OpenT_A2L-Forge/releases):
+
+| Platform | Artifact |
+|----------|----------|
+| Windows x64 | `OpenT-A2L-Forge_*_windows-x64.zip` |
+| Linux x64 | `OpenT-A2L-Forge_*_linux-x64.tar.gz` |
+| macOS ARM64 | `OpenT-A2L-Forge_*_macos-arm64.tar.gz` |
+
+No installer needed — extract and run. The standalone CLI binary (`opent_a2l_forge_cli`) is published alongside the desktop app in the same release.
+
 ---
 
 ## Screenshots
@@ -241,7 +253,7 @@ Use `--missing report` to fail safely when tracked items disappear, or `--missin
 ### Running Tests
 
 ```bash
-# Rust tests (43 default, 45 with `--features cli`)
+# Rust tests (add --features cli for CLI sync tests)
 cargo test --manifest-path src-tauri/Cargo.toml
 
 # Playwright E2E tests (requires release binary built first)

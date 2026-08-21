@@ -7,7 +7,7 @@
 
 | Version | Status |
 |---------|--------|
-| v6.0.1 | **current** — Theme Consolidation & Dead Code Removal |
+| v6.0 | **COMPLETE** — Visual Upgrade phase shipped (v6.0.1–v6.0.4). Next work: pick from Backlog or Series E–H. |
 
 ## v1.0 — Foundations & Core A2L I/O
 
@@ -552,7 +552,7 @@ Reference tokens (Variant A):
 | selection | `rgba(55,148,255,.18)` + 2px left accent edge | hardcoded `#37373d !important` |
 | radius scale | 4–6px on interactive controls | 0px / ad-hoc |
 
-### v6.0.1 — Theme Consolidation & Dead Code Removal (COMPLETE)
+### v6.0.1 — Theme Consolidation & Dead Code Removal — COMPLETE
 
 **Goal:** Single source of truth for colors; delete dead CSS; apply the Variant A token set.
 
@@ -592,16 +592,16 @@ Reference tokens (Variant A):
 - [x] Micro-interactions (Variant A scale): hover brightness on primary buttons, transition tokens in theme, segmented type-picker transitions
 - [x] Re-capture all README/landing screenshots after restyle
 
-### v6.0.4 — Landing Page & README Fixes (current) (ACTIVE)
+### v6.0.4 — Landing Page & README Fixes (COMPLETE)
 
 **Goal:** Robust, self-contained web presence.
 
-- [ ] Landing page: use relative screenshot paths (../screenshots/*.png) instead of raw.githubusercontent.com hotlinks
-- [ ] Landing page: add favicon, Open Graph + Twitter card meta tags
-- [ ] Landing page: replace literal backticks in copy with <code> elements
-- [ ] README: add user-facing Download section up top (platform availability, latest release link)
-- [ ] README: drop rotting hard-coded test counts
-- [ ] Verify gh-pages deploy after changes
+- [x] Landing page: use relative screenshot paths (../screenshots/*.png) instead of raw.githubusercontent.com hotlinks
+- [x] Landing page: add favicon, Open Graph + Twitter card meta tags
+- [x] Landing page: replace literal backticks in copy with <code> elements
+- [x] README: add user-facing Download section up top (platform availability, latest release link)
+- [x] README: drop rotting hard-coded test counts
+- [x] Verify gh-pages deploy after changes
 
 ## Backlog
 
