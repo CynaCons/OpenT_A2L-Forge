@@ -10,7 +10,6 @@ import {
   TextField,
   Grid,
   Stack,
-  Typography,
   Alert,
   Divider,
 } from "@mui/material";
@@ -246,26 +245,41 @@ export function CreateEntityDialog({ open, moduleName, onClose, onCreated }: Cre
 
   return (
     <Dialog data-testid="create-entity-dialog" open={open} onClose={onClose} maxWidth="md" fullWidth>
-      <DialogTitle sx={{ display: "flex", alignItems: "center", gap: 2 }}>
-        <Typography variant="h6" sx={{ flex: 1 }}>Create Entity</Typography>
-        <TextField
-          data-testid="btn-create-entity"
-          select
-          size="small"
-          label="Entity Type"
-          value={entityType}
-          onChange={(e) => setEntityType(e.target.value as EntityType)}
-          sx={{ minWidth: 180 }}
-        >
-          <MenuItem value="Measurement">Measurement</MenuItem>
-          <MenuItem value="Characteristic">Characteristic</MenuItem>
-          <MenuItem value="AxisPts">AxisPts</MenuItem>
-          <MenuItem value="CompuMethod">CompuMethod</MenuItem>
-          <MenuItem value="CompuVtab">CompuVtab</MenuItem>
-          <MenuItem value="RecordLayout">RecordLayout</MenuItem>
-        </TextField>
-      </DialogTitle>
+      <DialogTitle>Create Entity</DialogTitle>
       <DialogContent>
+        <Box sx={{ display: "flex", flexWrap: "wrap", gap: 0.75, mb: 2.5 }}>
+          {(["Measurement", "Characteristic", "AxisPts", "CompuMethod", "CompuVtab", "RecordLayout"] as EntityType[]).map(t => {
+            const selected = entityType === t;
+            return (
+              <Box
+                key={t}
+                data-testid={`create-entity-type-tab-${t}`}
+                role="button"
+                tabIndex={0}
+                aria-pressed={selected}
+                onClick={() => setEntityType(t)}
+                onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); setEntityType(t); } }}
+                sx={{
+                  fontSize: 12,
+                  fontWeight: 600,
+                  px: 1.5,
+                  py: 0.6,
+                  borderRadius: 1.5,
+                  cursor: "pointer",
+                  userSelect: "none",
+                  color: selected ? "#fff" : "text.secondary",
+                  bgcolor: selected ? getEntityAccent(t) : "transparent",
+                  border: 1,
+                  borderColor: selected ? "transparent" : "divider",
+                  transition: "background-color 150ms ease, color 150ms ease, border-color 150ms ease",
+                  "&:hover": { bgcolor: selected ? getEntityAccent(t) : "action.hover" },
+                }}
+              >
+                {t}
+              </Box>
+            );
+          })}
+        </Box>
         {entityType === "Measurement" && (
           <MeasurementCreateForm moduleName={moduleName} onSave={handleCreated} onCancel={onClose} />
         )}
