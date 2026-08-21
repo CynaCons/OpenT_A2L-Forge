@@ -6,11 +6,12 @@ import {
   TextField,
   MenuItem,
   Stack,
-  Typography,
   Grid,
   Alert,
   Divider,
 } from "@mui/material";
+import { getEntityAccent } from "../../theme";
+import { SectionHeader } from "../shared";
 
 type CompuMethodData = {
   name: string;
@@ -29,27 +30,7 @@ type CompuMethodEditorProps = {
 };
 
 const CONVERSION_TYPES = ["IDENTICAL", "LINEAR", "RAT_FUNC", "TAB_INTP", "TAB_NOINTP", "TAB_VERB", "FORM"];
-const ACCENT = "#c586c0";
-
-function SectionHeader({ title }: { title: string }) {
-  return (
-    <Typography
-      variant="overline"
-      sx={{
-        display: "block",
-        color: "#888",
-        letterSpacing: 1.5,
-        fontSize: 10,
-        borderLeft: `2px solid ${ACCENT}`,
-        pl: 1.5,
-        mb: 0.5,
-        mt: 1,
-      }}
-    >
-      {title}
-    </Typography>
-  );
-}
+const ACCENT = getEntityAccent("CompuMethod");
 
 export function CompuMethodEditor({ moduleName, onSave, onCancel }: CompuMethodEditorProps) {
   const [data, setData] = useState<CompuMethodData>({
@@ -87,7 +68,7 @@ export function CompuMethodEditor({ moduleName, onSave, onCancel }: CompuMethodE
     <Box data-testid="editor-compu-method" sx={{ display: "flex", flexDirection: "column", gap: 2.5, pt: 1 }}>
       {error && <Alert severity="error">{error}</Alert>}
 
-      <SectionHeader title="Identity" />
+      <SectionHeader title="Identity" accent={ACCENT} />
       <Grid container spacing={2}>
         <Grid size={{ xs: 12, sm: 6 }}>
           <TextField
@@ -117,7 +98,7 @@ export function CompuMethodEditor({ moduleName, onSave, onCancel }: CompuMethodE
         </Grid>
       </Grid>
 
-      <SectionHeader title="Description" />
+      <SectionHeader title="Description" accent={ACCENT} />
       <Grid container spacing={2}>
         <Grid size={{ xs: 12 }}>
           <TextField
@@ -132,7 +113,7 @@ export function CompuMethodEditor({ moduleName, onSave, onCancel }: CompuMethodE
         </Grid>
       </Grid>
 
-      <SectionHeader title="Format & Unit" />
+      <SectionHeader title="Format & Unit" accent={ACCENT} />
       <Grid container spacing={2}>
         <Grid size={{ xs: 12, sm: 6 }}>
           <TextField
@@ -157,7 +138,7 @@ export function CompuMethodEditor({ moduleName, onSave, onCancel }: CompuMethodE
 
       {showCoeffs && (
         <>
-          <SectionHeader title="Coefficients (a, b, c, d, e, f)" />
+          <SectionHeader title="Coefficients (a, b, c, d, e, f)" accent={ACCENT} />
           <Grid container spacing={1}>
             {[0, 1, 2, 3, 4, 5].map((i) => (
               <Grid key={i} size={{ xs: 4, sm: 2 }}>
@@ -183,7 +164,7 @@ export function CompuMethodEditor({ moduleName, onSave, onCancel }: CompuMethodE
 
       {showTabRef && (
         <>
-          <SectionHeader title="Table Reference" />
+          <SectionHeader title="Table Reference" accent={ACCENT} />
           <Grid container spacing={2}>
             <Grid size={{ xs: 12 }}>
               <TextField

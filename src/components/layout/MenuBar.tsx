@@ -8,6 +8,7 @@ import {
   Typography,
 } from "@mui/material";
 import type { RecentFile } from "../../types";
+import { tokens } from "../../theme";
 
 interface MenuBarProps {
   fileMenuAnchor: HTMLElement | null;
@@ -41,11 +42,11 @@ export function MenuBar({
   onShowUnsavedDialog,
 }: MenuBarProps) {
   return (
-    <Box sx={{ height: 28, bgcolor: "#333", display: "flex", alignItems: "center", px: 1, borderBottom: "1px solid #444" }}>
-      <Button size="small" sx={{ fontSize: 11, color: "#ccc", minWidth: "auto", px: 1, textTransform: "none" }}
+    <Box sx={{ height: 28, bgcolor: tokens.surface, display: "flex", alignItems: "center", px: 1, borderBottom: `1px solid ${tokens.border}` }}>
+      <Button size="small" sx={{ fontSize: 11, color: tokens.textPrimary, minWidth: "auto", px: 1, textTransform: "none" }}
         onClick={onFileMenuOpen}>File</Button>
       <Menu anchorEl={fileMenuAnchor} open={Boolean(fileMenuAnchor)} onClose={onFileMenuClose}
-        slotProps={{ paper: { sx: { bgcolor: "#252526", color: "#ccc", minWidth: 200 } } }}>
+        slotProps={{ paper: { sx: { bgcolor: tokens.surface, color: tokens.textPrimary, minWidth: 200 } } }}>
         <MenuItem onClick={() => { onCreateA2l(); onFileMenuClose(); }} sx={{ fontSize: 13 }}>
           <ListItemText>New A2L</ListItemText>
           <Typography variant="body2" color="text.secondary" sx={{ ml: 3, fontSize: 11 }}>Ctrl+N</Typography>
@@ -62,7 +63,7 @@ export function MenuBar({
           <ListItemText>Save As...</ListItemText>
           <Typography variant="body2" color="text.secondary" sx={{ ml: 3, fontSize: 11 }}>Ctrl+Shift+S</Typography>
         </MenuItem>
-        {recentA2lFiles.length > 0 && <Divider sx={{ borderColor: "#444" }} />}
+        {recentA2lFiles.length > 0 && <li><Divider sx={{ borderColor: tokens.border }} /></li>}
         {recentA2lFiles.filter(f => f.path).slice(0, 5).map(f => (
           <MenuItem key={f.path} onClick={() => {
             if (f.path) {

@@ -28,7 +28,7 @@ import type {
   StatusType,
   SymbolWithMapping,
 } from "./types";
-import { ideTheme } from "./theme";
+import { ideTheme, tokens } from "./theme";
 
 import { TitleBar } from "./components/layout/TitleBar";
 import { MenuBar } from "./components/layout/MenuBar";
@@ -1034,10 +1034,10 @@ function App() {
             minWidth: 280,
             maxWidth: "40vw",
             width: "fit-content",
-            bgcolor: "#252526",
+            bgcolor: tokens.surface,
             display: "flex",
             flexDirection: "column",
-            borderRight: "1px solid #333",
+            borderRight: `1px solid ${tokens.border}`,
             whiteSpace: "nowrap",
             overflow: "hidden",
           }}>

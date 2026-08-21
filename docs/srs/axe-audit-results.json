@@ -1,0 +1,29 @@
+{
+  "generated": "2026-08-21T16:55:40.521Z",
+  "results": [
+    {
+      "view": "explorer",
+      "violations": []
+    },
+    {
+      "view": "elf-inspector",
+      "violations": []
+    },
+    {
+      "view": "entity-detail",
+      "violations": [
+        {
+          "id": "aria-prohibited-attr",
+          "impact": "serious",
+          "description": "Ensure ARIA attributes are not prohibited for an element's role",
+          "nodes": 1,
+          "targets": [
+            [
+              ".css-4z6nar"
+            ]
+          ]
+        }
+      ]
+    }
+  ]
+}

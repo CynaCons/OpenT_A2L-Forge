@@ -34,12 +34,14 @@ export function ElfSidebarPanel({ recentElfFiles, onOpenElfDialog, onLoadElfFrom
           <Typography variant="caption" color="text.secondary">RECENT</Typography>
           <List dense>
             {recentElfFiles.map(file => (
-              <ListItemButton key={file.name + file.lastOpened} onClick={() => {
-                if (file.path) onLoadElfFromPath(file.path);
-              }}>
-                <ListItemIcon sx={{ minWidth: 32 }}><MemoryIcon fontSize="small" sx={{ fontSize: 16 }} /></ListItemIcon>
-                <ListItemText primary={file.name} secondary={file.path} primaryTypographyProps={{ noWrap: true, fontSize: 12 }} secondaryTypographyProps={{ noWrap: true, fontSize: 10 }} />
-              </ListItemButton>
+              <li key={file.name + file.lastOpened} style={{ listStyle: "none" }}>
+                <ListItemButton onClick={() => {
+                  if (file.path) onLoadElfFromPath(file.path);
+                }}>
+                  <ListItemIcon sx={{ minWidth: 32 }}><MemoryIcon fontSize="small" sx={{ fontSize: 16 }} /></ListItemIcon>
+                  <ListItemText primary={file.name} secondary={file.path} primaryTypographyProps={{ noWrap: true, fontSize: 12 }} secondaryTypographyProps={{ noWrap: true, fontSize: 10 }} />
+                </ListItemButton>
+              </li>
             ))}
           </List>
         </Box>

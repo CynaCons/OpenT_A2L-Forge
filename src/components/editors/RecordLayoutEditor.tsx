@@ -6,11 +6,12 @@ import {
   TextField,
   MenuItem,
   Stack,
-  Typography,
   Grid,
   Alert,
   Divider,
 } from "@mui/material";
+import { getEntityAccent } from "../../theme";
+import { SectionHeader } from "../shared";
 
 type RecordLayoutData = {
   name: string;
@@ -28,27 +29,7 @@ const DATA_TYPES = [
   "A_UINT64", "A_INT64", "FLOAT32_IEEE", "FLOAT64_IEEE",
 ];
 
-const ACCENT = "#c586c0";
-
-function SectionHeader({ title }: { title: string }) {
-  return (
-    <Typography
-      variant="overline"
-      sx={{
-        display: "block",
-        color: "#888",
-        letterSpacing: 1.5,
-        fontSize: 10,
-        borderLeft: `2px solid ${ACCENT}`,
-        pl: 1.5,
-        mb: 0.5,
-        mt: 1,
-      }}
-    >
-      {title}
-    </Typography>
-  );
-}
+const ACCENT = getEntityAccent("RecordLayout");
 
 export function RecordLayoutEditor({ moduleName, onSave, onCancel }: RecordLayoutEditorProps) {
   const [data, setData] = useState<RecordLayoutData>({
@@ -78,7 +59,7 @@ export function RecordLayoutEditor({ moduleName, onSave, onCancel }: RecordLayou
     <Box data-testid="editor-record-layout" sx={{ display: "flex", flexDirection: "column", gap: 2.5, pt: 1 }}>
       {error && <Alert severity="error">{error}</Alert>}
 
-      <SectionHeader title="Identity" />
+      <SectionHeader title="Identity" accent={ACCENT} />
       <Grid container spacing={2}>
         <Grid size={{ xs: 12 }}>
           <TextField
@@ -93,7 +74,7 @@ export function RecordLayoutEditor({ moduleName, onSave, onCancel }: RecordLayou
         </Grid>
       </Grid>
 
-      <SectionHeader title="FNC Values" />
+      <SectionHeader title="FNC Values" accent={ACCENT} />
       <Grid container spacing={2}>
         <Grid size={{ xs: 12 }}>
           <TextField

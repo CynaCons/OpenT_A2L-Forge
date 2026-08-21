@@ -17,13 +17,8 @@ import {
 import { CompuMethodEditor } from "../editors/CompuMethodEditor";
 import { CompuVtabEditor } from "../editors/CompuVtabEditor";
 import { RecordLayoutEditor } from "../editors/RecordLayoutEditor";
-
-const DATA_TYPES = [
-  "UBYTE", "SBYTE", "UWORD", "SWORD", "ULONG", "SLONG",
-  "A_UINT64", "A_INT64", "FLOAT32_IEEE", "FLOAT64_IEEE",
-];
-
-const CHARACTERISTIC_TYPES = ["VALUE", "CURVE", "MAP", "CUBOID", "VAL_BLK", "ASCII"];
+import { DATA_TYPES, CHARACTERISTIC_TYPES, getEntityAccent } from "../../theme";
+import { SectionHeader } from "../shared";
 
 type EntityType = "Measurement" | "Characteristic" | "AxisPts" | "CompuMethod" | "CompuVtab" | "RecordLayout";
 
@@ -32,35 +27,6 @@ interface CreateEntityDialogProps {
   moduleName: string;
   onClose: () => void;
   onCreated: () => void;
-}
-
-const ACCENT_MAP: Record<EntityType, string> = {
-  Measurement: "#4ec9b0",
-  Characteristic: "#ce9178",
-  AxisPts: "#569cd6",
-  CompuMethod: "#c586c0",
-  CompuVtab: "#dcdcaa",
-  RecordLayout: "#c586c0",
-};
-
-function SectionHeader({ title, accent }: { title: string; accent: string }) {
-  return (
-    <Typography
-      variant="overline"
-      sx={{
-        display: "block",
-        color: "#888",
-        letterSpacing: 1.5,
-        fontSize: 10,
-        borderLeft: `2px solid ${accent}`,
-        pl: 1.5,
-        mb: 0.5,
-        mt: 1,
-      }}
-    >
-      {title}
-    </Typography>
-  );
 }
 
 function MeasurementCreateForm({ moduleName, onSave, onCancel }: { moduleName: string; onSave: () => void; onCancel: () => void }) {
@@ -77,7 +43,7 @@ function MeasurementCreateForm({ moduleName, onSave, onCancel }: { moduleName: s
   });
   const [error, setError] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
-  const accent = ACCENT_MAP.Measurement;
+  const accent = getEntityAccent("Measurement");
 
   const handleSave = async () => {
     if (!data.name.trim()) { setError("Name is required"); return; }
@@ -140,7 +106,7 @@ function CharacteristicCreateForm({ moduleName, onSave, onCancel }: { moduleName
   });
   const [error, setError] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
-  const accent = ACCENT_MAP.Characteristic;
+  const accent = getEntityAccent("Characteristic");
 
   const handleSave = async () => {
     if (!data.name.trim()) { setError("Name is required"); return; }
@@ -212,7 +178,7 @@ function AxisPtsCreateForm({ moduleName, onSave, onCancel }: { moduleName: strin
   });
   const [error, setError] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
-  const accent = ACCENT_MAP.AxisPts;
+  const accent = getEntityAccent("AxisPts");
 
   const handleSave = async () => {
     if (!data.name.trim()) { setError("Name is required"); return; }

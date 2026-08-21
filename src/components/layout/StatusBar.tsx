@@ -1,4 +1,4 @@
-import { Box, Stack } from "@mui/material";
+import { Box, IconButton, Stack } from "@mui/material";
 import {
   Description as DescriptionIcon,
   Memory as MemoryIcon,
@@ -6,6 +6,7 @@ import {
   Terminal,
 } from "@mui/icons-material";
 import type { StatusState } from "../../types";
+import { tokens } from "../../theme";
 
 interface StatusBarProps {
   status: StatusState | null;
@@ -16,7 +17,7 @@ interface StatusBarProps {
 }
 
 export function StatusBar({ status, fileName, elfName, isDirty, onDismissError }: StatusBarProps) {
-  const bg = status?.type === "error" ? "#9a3324" : "#007acc";
+  const bg = status?.type === "error" ? tokens.statusError : tokens.statusBarBg;
   return (
     <Box
       sx={{
@@ -33,11 +34,20 @@ export function StatusBar({ status, fileName, elfName, isDirty, onDismissError }
       }}
     >
       <Stack direction="row" spacing={2} alignItems="center">
-        <Box sx={{ display: "flex", alignItems: "center", gap: 0.5, cursor: status?.type === "error" ? "pointer" : "default" }}
-          onClick={() => { if (status?.type === "error" && onDismissError) onDismissError(); }}>
+        <Box sx={{ display: "flex", alignItems: "center", gap: 0.5 }}>
            {status?.type === "error" ? <CloseIcon sx={{ fontSize: 12 }} /> : <Terminal sx={{ fontSize: 12 }} />}
            <span data-testid="status-message">{status?.message || "Ready"}</span>
-           {status?.type === "error" && <CloseIcon sx={{ fontSize: 10, ml: 0.5, opacity: 0.7 }} />}
+           {status?.type === "error" && onDismissError && (
+             <IconButton
+               data-testid="btn-dismiss-error"
+               aria-label="Dismiss error"
+               onClick={onDismissError}
+               size="small"
+               sx={{ color: "#fff", ml: 0.5, p: 0.25 }}
+             >
+               <CloseIcon sx={{ fontSize: 12 }} />
+             </IconButton>
+           )}
         </Box>
       </Stack>
       <Stack direction="row" spacing={3} alignItems="center">

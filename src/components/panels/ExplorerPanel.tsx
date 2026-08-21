@@ -26,7 +26,7 @@ import {
   NoteAdd as NoteAddIcon,
 } from "@mui/icons-material";
 import type { A2lMetadata, A2lTree, A2lTreeItem, RecentFile } from "../../types";
-import { getKindIcon } from "../../theme";
+import { getKindIcon, tokens } from "../../theme";
 
 interface ExplorerPanelProps {
   metadata: A2lMetadata | null;
@@ -81,7 +81,7 @@ export function ExplorerPanel({
   return (
     <>
       <Box sx={{ p: 1, px: 2, display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-        <Typography variant="overline" data-testid="heading-explorer" sx={{ fontWeight: 600, letterSpacing: 1, color: "#bbb" }}>EXPLORER</Typography>
+        <Typography variant="overline" data-testid="heading-explorer" sx={{ fontWeight: 600, letterSpacing: 1, color: "text.secondary" }}>EXPLORER</Typography>
         <Stack direction="row">
           <Tooltip title="New A2L (Ctrl+N)">
             <IconButton size="small" data-testid="btn-new-a2l" onClick={onCreateA2l} aria-label="New A2L"><AddIcon fontSize="small" /></IconButton>
@@ -121,15 +121,16 @@ export function ExplorerPanel({
             p: "2px 4px",
             display: "flex",
             alignItems: "center",
-            bgcolor: "#333",
-            border: "1px solid #3c3c3c",
-            "&:focus-within": { border: "1px solid #007acc" },
+            bgcolor: tokens.surface2,
+            border: `1px solid ${tokens.border}`,
+            "&:focus-within": { border: `1px solid ${tokens.accent}` },
           }}
         >
-          <SearchIcon sx={{ fontSize: 16, color: "#888", ml: 1, mr: 1 }} />
+          <SearchIcon sx={{ fontSize: 16, color: "text.secondary", ml: 1, mr: 1 }} />
           <InputBase
             data-testid="search-entities"
             placeholder="Search entities..."
+            inputProps={{ "aria-label": "Search entities" }}
             sx={{ ml: 1, flex: 1, fontSize: 12 }}
             value={searchQuery}
             onChange={(e) => onSearchChange(e.target.value)}
@@ -139,34 +140,36 @@ export function ExplorerPanel({
 
       {!metadata && recentA2lFiles.length > 0 && (
         <Box sx={{ flex: 1, overflow: "auto" }} data-testid="recent-a2l-list">
-          <Typography variant="caption" sx={{ px: 2, pb: 1, display: "block", color: "#888", mt: 2 }}>RECENT</Typography>
+          <Typography variant="caption" sx={{ px: 2, pb: 1, display: "block", color: "text.secondary", mt: 2 }}>RECENT</Typography>
           <List dense>
             {recentA2lFiles.map(file => (
-              <ListItemButton key={file.name + file.lastOpened} onClick={() => {
-                if (file.path) {
-                  if (isDirty) {
-                    onPendingAction(() => onLoadA2lFromPath(file.path!));
-                    onShowUnsavedDialog();
-                    return;
+              <li key={file.name + file.lastOpened} style={{ listStyle: "none" }}>
+                <ListItemButton onClick={() => {
+                  if (file.path) {
+                    if (isDirty) {
+                      onPendingAction(() => onLoadA2lFromPath(file.path!));
+                      onShowUnsavedDialog();
+                      return;
+                    }
+                    onLoadA2lFromPath(file.path);
                   }
-                  onLoadA2lFromPath(file.path);
-                }
-              }}>
-                <ListItemIcon sx={{ minWidth: 32 }}><DescriptionIcon fontSize="small" sx={{ fontSize: 16 }} /></ListItemIcon>
-                <ListItemText
-                  primary={file.name}
-                  secondary={file.path}
-                  primaryTypographyProps={{ noWrap: true, fontSize: 12 }}
-                  secondaryTypographyProps={{ noWrap: true, fontSize: 10, color: "#666" }}
-                />
-              </ListItemButton>
+                }}>
+                  <ListItemIcon sx={{ minWidth: 32 }}><DescriptionIcon fontSize="small" sx={{ fontSize: 16 }} /></ListItemIcon>
+                  <ListItemText
+                    primary={file.name}
+                    secondary={file.path}
+                    primaryTypographyProps={{ noWrap: true, fontSize: 12 }}
+                    secondaryTypographyProps={{ noWrap: true, fontSize: 10, color: "text.secondary" }}
+                  />
+                </ListItemButton>
+              </li>
             ))}
           </List>
         </Box>
       )}
 
       {metadata && filteredTree && (
-        <Box sx={{ flex: 1, overflow: "auto" }} data-testid="entity-tree">
+        <Box sx={{ flex: 1, overflow: "auto" }} data-testid="entity-tree" tabIndex={0} aria-label="Entity tree">
           <SimpleTreeView
             multiSelect
             selectedItems={selectedTreeItemIds}
@@ -180,7 +183,7 @@ export function ExplorerPanel({
             sx={{
               "& .MuiTreeItem-content": {
                 py: 0.5, px: 1, borderRadius: 1,
-                "&.Mui-selected": { bgcolor: "#37373d !important" },
+                "&.Mui-selected": { bgcolor: `${tokens.selection} !important` },
               },
             }}
           >
@@ -198,7 +201,7 @@ export function ExplorerPanel({
                   const remaining = section.items.length - visibleItems.length;
                   return (
                     <TreeItem key={section.id} itemId={`section-${section.id}`} label={
-                      <Typography variant="caption" color="text.secondary">{section.title} <span style={{ opacity: 0.5 }}>({section.items.length})</span></Typography>
+                      <Typography variant="caption" color="text.secondary">{section.title} <span style={{ opacity: 0.85 }}>({section.items.length})</span></Typography>
                     }>
                       {visibleItems.map(item => (
                         <TreeItem key={item.id} itemId={`item-${item.id}`}

@@ -1,15 +1,29 @@
 # PLAN — OpenT_A2L-Forge
 
-**Last updated:** 2026-02-19
+**Last updated:** 2026-08-21
+**Managed by:** powerplan (MCP). Prefer powerplan tools (`get_current_iteration`, `complete_task`, `create_iteration`, …) over freeform edits. History preserved from the pre-powerplan PLAN.md; original iteration IDs kept in titles.
 
-## Iteration 0 — Foundations
-- [x] Repo scaffolding, build, and CI basics
-  - [x] Tauri + React + TypeScript app skeleton builds locally
-  - [x] Rust backend command wiring established
-  - [x] Product owner demo: "Hello A2L-Forge" window opens
-  - [x] E2E: smoke test launches app and closes cleanly
+## Current Status
 
-## Iteration 1 — Core A2L I/O (Series A)
+| Version | Status |
+|---------|--------|
+| v6.0.1 | **current** — Theme Consolidation & Dead Code Removal |
+
+## v1.0 — Foundations & Core A2L I/O
+
+### v1.0.1 — Iteration 0: Foundations — COMPLETE
+
+**Goal:** Repo scaffolding, build, and CI basics.
+
+- [x] Tauri + React + TypeScript app skeleton builds locally
+- [x] Rust backend command wiring established
+- [x] Product owner demo: "Hello A2L-Forge" window opens
+- [x] E2E: smoke test launches app and closes cleanly
+
+### v1.0.2 — Iteration 1: Core A2L I/O (Series A) — COMPLETE
+
+**Goal:** Open, parse, and save A2L files with demo fixtures.
+
 - [x] A0: Test resources & demo flow
   - [x] A2L fixtures source: external/a2ltool/fixtures/a2l
   - [x] Copy curated samples into tests/fixtures/a2l (small + medium)
@@ -32,7 +46,12 @@
   - [x] E2E: open → edit → export → re-open
   - [x] E2E demo progress: keep UI visible through each step above
 
-## Iteration 2 — Editor Core (Series B)
+## v2.0 — Editor Core, Templates & Creation
+
+### v2.0.1 — Iteration 2: Editor Core (Series B)
+
+**Goal:** Entity browser, selection, and core editing. B3 deferred to Series F.
+
 - [x] B0: Iteration kickoff (in progress)
   - [x] Define core entity list for browser (MODULE, MEASUREMENT, CHARACTERISTIC, AXIS_PTS)
   - [x] Decide data shape for tree nodes and selection state
@@ -51,13 +70,16 @@
   - [x] Edit AXIS_PTS (Full editor)
   - [x] Product owner demo: edit core entities and save
   - [x] E2E: modify entity → save → reload
-- [ ] B3: Computation & conversion (Deferred to Iteration 6)
+- [ ] B3: Computation & conversion (Deferred to Iteration 6 / Series F)
   - [ ] Edit COMPU_METHOD/COMPU_TAB/COMPU_VTAB
   - [ ] Validate references
   - [ ] Product owner demo: update conversion & export
   - [ ] E2E: edit conversion → validate → export
 
-## Iteration 3 — Templates & Creation (Series C)
+### v2.0.2 — Iteration 3: Templates & Creation (Series C)
+
+**Goal:** New-file creation flows, empty and template-based.
+
 - [ ] C1: New A2L creation
   - [x] Create empty database
   - [x] Initialize minimal PROJECT/MODULE
@@ -69,7 +91,12 @@
   - [ ] Product owner demo: create from template
   - [ ] E2E: new from template → validate
 
-## Iteration 4 — ELF Import (Series D)
+## v3.0 — ELF Import & Workflow
+
+### v3.0.1 — Iteration 4: ELF Import (Series D) — COMPLETE
+
+**Goal:** Ingest ELF binaries, map symbols into A2L, expand DWARF structs.
+
 - [x] D1: ELF ingestion
   - [x] Import ELF (initial architecture set)
   - [x] Display symbol table and types
@@ -95,7 +122,10 @@
   - [x] Display DWARF Type column in ELF table
   - [x] E2E: mock data with dwarf_type fields
 
-## Iteration 4.5 — Platform Fixes & File Watching
+### v3.0.2 — Iteration 4.5: Platform Fixes & File Watching — COMPLETE
+
+**Goal:** Native dialogs, window controls, ELF watcher, SRS documentation base.
+
 - [x] R1: Fix Window Frame Buttons
   - [x] Add core:window permissions (minimize, close, toggle-maximize, is-maximized)
   - [x] Replace setInterval polling with onResized event listener
@@ -150,7 +180,10 @@
   - [x] Migrated all 5 binary E2E test files to `getByTestId()` selectors
   - [x] All 30 mock tests passing
 
-## Iteration 4.6 — ELF Workflow Fixes & Test Audit
+### v3.0.3 — Iteration 4.6: ELF Workflow Fixes & Test Audit — COMPLETE
+
+**Goal:** Conflict-resolution correctness and comprehensive E2E coverage.
+
 - [x] Bug Fix: "Replace All" conflict resolution no longer creates duplicates
   - [x] Backend `create_measurements_with_mapping` now retains/replaces existing measurements
   - [x] Mock `create_measurements_with_mapping` updated to match
@@ -169,7 +202,10 @@
   - [x] tests/e2e/dwarf-struct-members.spec.ts (3 tests) — DWARF type display, member import
   - [x] tests/e2e/elf-filters.spec.ts (5 tests) — search, sort, filter chips
 
-## Iteration 4.7 — Binary E2E Tests with Real ELF and A2L Files
+### v3.0.4 — Iteration 4.7: Binary E2E Tests with Real ELF and A2L Files — COMPLETE
+
+**Goal:** Real-backend testing via core function extraction and CDP binary fixtures.
+
 - [x] Refactored lib.rs: extracted core functions (no Tauri dependency)
   - [x] `core_load_a2l_from_string`, `core_load_a2l_from_path`
   - [x] `core_load_elf_symbols`, `core_load_elf_symbols_from_buffer`
@@ -196,7 +232,10 @@
   - [x] `tests/e2e/binary/window-controls.spec.ts` (1 test) — real window IPC
 - [x] All tests green: 30 mock Playwright + 10 binary Playwright (real binary via CDP) + 9 Rust integration
 
-## Iteration 4.8 — Real Binary E2E Migration & UX Polish
+### v3.0.5 — Iteration 4.8: Real Binary E2E Migration & UX Polish — COMPLETE
+
+**Goal:** Ban mocks, shared binary fixtures, UX polish, DWARF5 support.
+
 - [x] R14: Ban mocks — all E2E tests use real release binary via CDP
   - [x] Deleted all 16 mock spec files and mocks.ts
   - [x] Deleted tests/e2e/binary/ subdirectory (merged into main test dir)
@@ -262,7 +301,10 @@
   - [x] 3 Voyant ELF integration tests: struct member expansion, data type verification, A2L measurement creation
   - [x] All 12 Rust tests pass, all 22 E2E tests pass
 
-## Iteration 4.9 — CHARACTERISTIC Import, Arrays, Enums & Large Files
+### v3.0.6 — Iteration 4.9: CHARACTERISTIC Import, Arrays, Enums & Large Files — COMPLETE
+
+**Goal:** Characteristic imports, array/enum DWARF support, large-file list performance.
+
 - [x] R23: Array support with MATRIX_DIM
   - [x] DWARF DW_TAG_array_type + DW_TAG_subrange_type parsing for element type/count
   - [x] Element type resolution through typedef chain for correct A2L type inference
@@ -303,7 +345,10 @@
   - [x] SRS-INDEX.md updated with R11-R15
 - [x] All 16 Rust integration tests pass, all 22 E2E tests pass
 
-## Iteration 4.95 — Visual Overhaul: Modern Card-Based A2L View
+### v3.0.7 — Iteration 4.95: Visual Overhaul — Modern Card-Based A2L View — COMPLETE
+
+**Goal:** First visual polish pass on entity detail and editors.
+
 - [x] Added `getKindColor()` helper for entity-type accent colors
 - [x] Added `getPropertySection()` helper for grouping properties by category
 - [x] Restyled entity detail header — card with colored left border, filled chips, tinted icon background
@@ -316,55 +361,10 @@
 - [x] All `data-testid` attributes preserved
 - [x] Smoke test: `npm run dev` passes, `tsc --noEmit` clean
 
-## Iteration 5 — Validation & Integrity (Series E)
-- [ ] E1: Validation engine
-  - [ ] Cross-reference checks and constraints
-  - [ ] Pre-export validation report
-  - [ ] Product owner demo: validation report on errors
-  - [ ] E2E: invalid edit → validation errors
-- [ ] E2: Undo/redo & autosave
-  - [ ] Undo/redo for key edits
-  - [ ] Autosave with recovery
-  - [ ] Product owner demo: recover after crash
-  - [ ] E2E: edit → crash sim → recover
+### v3.0.8 — Iteration 4.96: UI/UX Fixes + GitHub Pages Landing Page — COMPLETE
 
-## Iteration 6 — Performance & UX (Series F)
-- [ ] F1: Large file performance
-  - [ ] A2L 10–50MB load targets met
-  - [ ] ELF 50–200MB import targets met
-  - [ ] Product owner demo: large sample loads
-  - [ ] E2E: load large fixtures and measure time
-- [ ] F2: Bulk tooling
-  - [ ] Batch edit operations
-  - [ ] Advanced search filters
-  - [ ] Product owner demo: bulk edit flow
-  - [ ] E2E: batch edit → validate → export
+**Goal:** Data-loss protection, consistent editors, landing page deployment.
 
-## Iteration 7 — Packaging & Release (Series G)
-- [ ] G1: Cross-platform packaging
-  - [ ] Windows/Linux/macOS build pipeline
-  - [ ] Signed artifacts (where applicable)
-  - [ ] Product owner demo: install packages
-  - [ ] E2E: install → launch → open sample
-- [ ] G2: Docs & onboarding
-  - [ ] Quickstart and sample datasets
-  - [ ] In-app help
-  - [ ] Product owner demo: guided onboarding
-  - [ ] E2E: follow quickstart flow
-
-## Iteration 8 — Design demos (Series H)
-- [ ] H1: Visual design pass
-  - [ ] UI framework final selection
-  - [x] Theming and layout pass
-  - [ ] Product owner demo: design review
-  - [ ] E2E: basic navigation flow
-- [ ] H2: UX refinement
-  - [ ] Interaction polish
-  - [ ] Accessibility review
-  - [ ] Product owner demo: UX sign-off
-  - [ ] E2E: navigation + keyboard flow
-
-## Iteration 4.96 — UI/UX Fixes + GitHub Pages Landing Page
 - [x] R29: Unsaved changes protection (data loss prevention)
   - [x] isDirty guard on handleOpenA2lDialog — triggers unsaved dialog before opening
   - [x] isDirty guard on handleCreateA2l — triggers unsaved dialog before creating new
@@ -384,7 +384,25 @@
   - [x] .github/workflows/gh-pages.yml — deploy on push to master
 - [x] Smoke test: tsc --noEmit clean, Vite dev server starts without errors
 
-## Iteration 5.0 — Architecture Refactor: CRUD, Validator & Module Split
+### v3.0.9 — Iteration 4.97: A2L Detail View — Clean Table Layout Rework — COMPLETE
+
+**Goal:** Replace card-based detail view with compact table layout.
+
+- [x] Replaced Card-based entity detail header with compact Box layout (h5, bottom border, inline description)
+- [x] Removed separate Description Card — folded into header as italic secondary text
+- [x] Replaced card-per-property grid with two-column CSS grid table layout (180px label | 1fr value)
+- [x] Added section headers (uppercase overline + Divider) replacing colored-border section labels
+- [x] Alternating row backgrounds (transparent / rgba(255,255,255,0.02)) for readability
+- [x] Removed unused Card/CardContent MUI imports
+- [x] All data-testid attributes preserved (entity-detail, btn-edit)
+- [x] Smoke test: tsc --noEmit clean, Vite dev server starts without errors
+
+## v4.0 — Architecture, Validator & Release Engineering
+
+### v4.0.1 — Iteration 5.0: Architecture Refactor — CRUD, Validator & Module Split — COMPLETE
+
+**Goal:** Split monoliths, add validator and manual entity creation, refactor frontend.
+
 - [x] Phase A: Rust Module Split — split lib.rs (2,885 lines) into types.rs, elf_parser.rs, a2l_ops.rs, validator.rs; lib.rs now ~620 lines
 - [x] Phase B: A2L Validator — 9 validation rules, 8 integration tests, all 29 tests pass
 - [x] Phase C: Manual Entity Creation Backend — 6 core_create_* functions, 5 integration tests, all 34 tests pass
@@ -397,17 +415,10 @@
   - [x] SRS-R19-Frontend-Refactor.md — Frontend component split documentation
   - [x] SRS-INDEX.md updated with R16-R19 entries
 
-## Iteration 4.97 — A2L Detail View: Clean Table Layout Rework
-- [x] Replaced Card-based entity detail header with compact Box layout (h5, bottom border, inline description)
-- [x] Removed separate Description Card — folded into header as italic secondary text
-- [x] Replaced card-per-property grid with two-column CSS grid table layout (180px label | 1fr value)
-- [x] Added section headers (uppercase overline + Divider) replacing colored-border section labels
-- [x] Alternating row backgrounds (transparent / rgba(255,255,255,0.02)) for readability
-- [x] Removed unused Card/CardContent MUI imports
-- [x] All data-testid attributes preserved (entity-detail, btn-edit)
-- [x] Smoke test: tsc --noEmit clean, Vite dev server starts without errors
+### v4.0.2 — Iteration 5.1: Production Deployment & Documentation — COMPLETE
 
-## Iteration 5.1 — Production Deployment & Documentation
+**Goal:** Refresh README/screenshots/landing page for release.
+
 - [x] Updated README.md — new project structure, manual entity creation section, validator section, 34 tests, updated roadmap
 - [x] New screenshot: create-entity.png showing Create Entity dialog with Measurement form
 - [x] Retook all screenshots (a2l-view, elf-view, import-view) at current app state
@@ -416,14 +427,20 @@
 - [x] Screenshot test: tests/e2e/take-screenshots.spec.ts for automated screenshot capture
 - [x] Committed and pushed to origin/master — GitHub Pages deployment triggered
 
-Iteration 5.2 — Recursive Nested Structure Support
-- [x] Recursive DWARF nested struct flattening now emits leaf symbols like `struct_b.s1.enumval` while preserving the top-level `parent_struct` grouping contract
+### v4.0.3 — Iteration 5.2: Recursive Nested Structure Support — COMPLETE
+
+**Goal:** Recursive nested struct flattening across parser, inspector, and sync.
+
+- [x] Recursive DWARF nested struct flattening now emits leaf symbols like `struct_b.s1.val_i32` while preserving the top-level `parent_struct` grouping contract
 - [x] ELF inspector now renders nested member paths relative to the top-level parent so sibling nested leaves remain distinguishable in the table
 - [x] Added Rust integration coverage for nested ELF flattening, nested measurement import, nested characteristic import, and nested A2L tree/export using existing repo fixtures
 - [x] Updated SRS-R4, SRS-R11, and SRS-INDEX to document recursive nested-structure support
 - [x] Verification: `cargo test --manifest-path src-tauri/Cargo.toml`, `npx playwright test tests/e2e/nested-structures.spec.ts`, `npm run dev` smoke
 
-## Iteration 5.3 — CLI A2L Sync Support
+### v4.0.4 — Iteration 5.3: CLI A2L Sync Support — COMPLETE
+
+**Goal:** Versioned sync projects and headless CLI sync for build systems.
+
 - [x] Added `src-tauri/src/cli_sync.rs` with versioned JSON sync-project loading/saving, relative-path resolution, headless sync execution, safe report mode, and explicit prune mode
 - [x] Added the standalone `opent_a2l_forge_cli` binary with `sync --project`, optional `--output`, optional `--missing`, JSON output, and build-friendly exit codes
 - [x] Extended the desktop ELF workflow with save/load sync-project actions, explicit struct-root tracking, restored selector state, and persisted preview-based mapping overrides
@@ -431,17 +448,164 @@ Iteration 5.2 — Recursive Nested Structure Support
 - [x] Updated `docs/srs/SRS-R20-CLI-Sync.md`, `docs/srs/SRS-INDEX.md`, and `AGENTS.md` for the CLI workflow and conventions
 - [x] Verification: `cargo test --manifest-path src-tauri/Cargo.toml`, `cargo run --manifest-path src-tauri/Cargo.toml --bin opent_a2l_forge_cli -- sync ...`, `npm run tauri build`, `npx playwright test tests/e2e/cli-sync-project.spec.ts`, `npm run dev`
 
-## Iteration 5.4 — CLI Release Docs, Hero, and GitHub Assets
+### v4.0.5 — Iteration 5.4: CLI Release Docs, Hero, and GitHub Assets — COMPLETE
+
+**Goal:** Release-facing documentation and assets for the CLI workflow.
+
 - [x] Updated the GitHub Pages hero and feature copy to position the desktop app alongside the build-system CLI workflow
 - [x] Added `docs/CLI-Quickstart.md` and refreshed `README.md` so the release docs cover sync-project authoring, CLI invocation, exit codes, and release outputs
 - [x] Added `docs/screenshots/cli-project-view.png` plus a reproducible `scripts/generate-cli-doc-screenshot.mjs` renderer for the CLI run screenshot
 - [x] Isolated the standalone CLI build behind the Cargo `cli` feature and a separate `src-tauri/target/cli-release` output so Tauri GUI bundles no longer collide with the CLI artifact
 - [x] Verification: `npm run build`, `npm run tauri build`, `npm run dev` smoke start
 
-## Iteration 5.5 — GitHub Actions Release Pipeline
+### v4.0.6 — Iteration 5.5: GitHub Actions Release Pipeline — COMPLETE
+
+**Goal:** Automated cross-platform release builds on tag push.
+
 - [x] Created `.github/workflows/release.yml` for automated cross-platform builds on tag push
 - [x] Builds Windows (x64), Linux (x64), macOS (ARM64) portable binaries
 - [x] Packages executables as `.zip`/`.tar.gz` and uploads to GitHub Releases
 - [x] Fixed stale `.claude/worktrees/` tracked in git, added to `.gitignore`
 - [x] Released v0.1.0 with all 3 platform binaries on GitHub Releases
 - [x] Verification: `npx tauri build --no-bundle`, GitHub Actions Run #4 succeeded, release at github.com/CynaCons/OpenT_A2L-Forge/releases/tag/v0.1.0
+
+## v5.0 — Validation, Performance & Packaging (Series E–G)
+
+### v5.0.1 — Iteration 5: Validation & Integrity (Series E)
+
+**Goal:** Validator UI surface plus undo/redo and autosave safety nets.
+
+- [ ] E1: Validation engine
+  - [ ] Cross-reference checks and constraints
+  - [ ] Pre-export validation report
+  - [ ] Product owner demo: validation report on errors
+  - [ ] E2E: invalid edit → validation errors
+- [ ] E2: Undo/redo & autosave
+  - [ ] Undo/redo for key edits
+  - [ ] Autosave with recovery
+  - [ ] Product owner demo: recover after crash
+  - [ ] E2E: edit → crash sim → recover
+
+Note: the backend validation engine itself shipped in v4.0.1 (9 rules); E1 is now primarily the frontend validator panel with click-to-navigate.
+
+### v5.0.2 — Iteration 6: Performance & UX (Series F)
+
+**Goal:** Large-file performance targets and bulk tooling (absorbs deferred B3).
+
+- [ ] F1: Large file performance
+  - [ ] A2L 10–50MB load targets met
+  - [ ] ELF 50–200MB import targets met
+  - [ ] Product owner demo: large sample loads
+  - [ ] E2E: load large fixtures and measure time
+- [ ] F2: Bulk tooling
+  - [ ] Batch edit operations
+  - [ ] Advanced search filters
+  - [ ] Product owner demo: bulk edit flow
+  - [ ] E2E: batch edit → validate → export
+
+### v5.0.3 — Iteration 7: Packaging & Release (Series G)
+
+**Goal:** Cross-platform packaging and onboarding docs. (CI release pipeline already shipped in v4.0.6.)
+
+- [ ] G1: Cross-platform packaging
+  - [x] Windows/Linux/macOS build pipeline (done in v4.0.6 via release.yml)
+  - [ ] Signed artifacts (where applicable)
+  - [ ] Product owner demo: install packages
+  - [ ] E2E: install → launch → open sample
+- [ ] G2: Docs & onboarding
+  - [ ] Quickstart and sample datasets
+  - [ ] In-app help
+  - [ ] Product owner demo: guided onboarding
+  - [ ] E2E: follow quickstart flow
+
+### v5.0.4 — Iteration 8: Design Demos (Series H)
+
+**Goal:** Design review and accessibility sign-off. Superseded in part by v6.x Visual Upgrade.
+
+- [ ] H1: Visual design pass
+  - [ ] UI framework final selection
+  - [x] Theming and layout pass
+  - [ ] Product owner demo: design review
+  - [ ] E2E: basic navigation flow
+- [ ] H2: UX refinement
+  - [ ] Interaction polish
+  - [ ] Accessibility review
+  - [ ] Product owner demo: UX sign-off
+  - [ ] E2E: navigation + keyboard flow
+
+## v6.0 — Visual Upgrade: Cohesive Theme, Accessibility & Web Presence
+
+**Goal:** Upgrade the overall visual feel of the app by consolidating theming, fixing accessibility gaps, polishing components, and repairing the web presence (landing page + README).
+
+**Decision (2026-08-21):** Direction locked to **Variant A — "Refined VS Code"** from `docs/prototypes/visual-upgrade.html` (owner-reviewed). Evolution of the existing VS Code DNA: single accent `#3794ff`, accessible muted grays, subtle 5px radius scale, no layout re-architecture.
+
+Reference tokens (Variant A):
+| Token | Value | Replaces |
+|-------|-------|----------|
+| accent / primary | `#3794ff` | `#007acc`, `#0e639c`, scattered literals |
+| bg default | `#1e1e1e` | (unchanged) |
+| surface / paper | `#252529` | `#252526`, chrome `#333333` |
+| surface2 | `#2d2d33` | `#2d2d2d`, search fields `#333333` |
+| border / divider | `#3c3c44` | `#333333`, `#444444` |
+| text primary | `#d6d6dd` | `#cccccc`, `#ccc`, `#e7e7e7` |
+| text muted | `#9d9daa` | `#666666`, `#777777`, `#aaaaaa`, 40% white icons |
+| selection | `rgba(55,148,255,.18)` + 2px left accent edge | hardcoded `#37373d !important` |
+| radius scale | 4–6px on interactive controls | 0px / ad-hoc |
+
+### v6.0.1 — Theme Consolidation & Dead Code Removal (COMPLETE)
+
+**Goal:** Single source of truth for colors; delete dead CSS; apply the Variant A token set.
+
+- [x] Delete unused `src/App.css` (512 lines dead code, unclosed brace at ~line 193, conflicting palette)
+- [x] Port focus-visible styles from dead App.css into global styles (`index.css`) using accent `#3794ff` ring
+- [x] Encode Variant A token set in `theme.ts` as the only color source (table above); keep kind colors (#dcdcaa/#4ec9b0/#ce9178/#569cd6/#c586c0) unchanged
+- [x] Replace hardcoded hex colors with theme tokens in layout chrome:
+  - [ ] TitleBar.tsx — logo icon + window chrome → theme tokens (`#007acc` accent retired)
+  - [ ] ActivityBar.tsx — inactive icons → muted `#9d9daa` (≥4.5:1), active = white + 2px `#3794ff` edge
+  - [ ] StatusBar.tsx — bg `#007acc` → `#3794ff`; error state stays accessible red
+  - [ ] MenuBar.tsx — `#333`/`#ccc`/`#444`/`#252526` → surface/border/text tokens
+  - [ ] ExplorerPanel.tsx — selection `#37373d !important` → `rgba(55,148,255,.18)` rounded row; search focus ring `#3794ff`
+  - [ ] EntityDetailPanel.tsx / SettingsPanel.tsx — muted grays `#555`–`#ccc` → `#9d9daa` / `#d6d6dd`
+  - [ ] ElfMainPanel.tsx — header/table literals → surface tokens; sort-active column accent
+- [x] Extract duplicated constants into shared module: kind color map (theme.ts vs CreateEntityDialog ACCENT_MAP), SectionHeader helper, DATA_TYPES (MeasurementEditor vs CreateEntityDialog)
+- [x] Verification: `tsc --noEmit` clean, `npm run dev` smoke, all E2E tests still green
+
+### v6.0.2 — Accessibility Pass (COMPLETE)
+
+**Goal:** WCAG-conscious contrast, keyboard operability everywhere.
+
+- [x] Fix contrast failures: #666/#777 muted grays on #1e1e1e (EntityDetailPanel section headers/labels), inactive ActivityBar icons (~2.9:1)
+- [x] Sortable ELF table headers: keyboard operable (button semantics or role/tabIndex/onKeyDown)
+- [x] Struct-collapse rows in ElfMainPanel: keyboard operable
+- [x] StatusBar error dismiss: make it a real Button
+- [x] Run axe/lighthouse-style audit on main views; document results
+- [x] SRS doc for accessibility requirements (feeds H2 roadmap item)
+
+### v6.0.3 — Component Polish & Interaction Consistency (current) (ACTIVE)
+
+**Goal:** Refine unconventional UX and heavy-list handling for a more premium feel (within Variant A's subtle aesthetic — no layout re-architecture).
+
+- [ ] Move entity-type selector out of DialogTitle into dialog body (CreateEntityDialog) — segmented picker per prototype section 4
+- [ ] Shared styled SectionHeader/form-skeleton component adopted by all editors + create dialog
+- [ ] Virtualize ELF symbol table rows (@mui/x-virtualization or react-window) behind existing filters
+- [ ] Sidebar collapse/toggle + minimum-window-width handling
+- [ ] Micro-interactions (Variant A scale): hover brightness on primary buttons, smooth tree chevrons, transition tokens in theme
+- [ ] Re-capture all README/landing screenshots after restyle
+
+### v6.0.4 — Landing Page & README Fixes
+
+**Goal:** Robust, self-contained web presence.
+
+- [ ] Landing page: use relative screenshot paths (../screenshots/*.png) instead of raw.githubusercontent.com hotlinks
+- [ ] Landing page: add favicon, Open Graph + Twitter card meta tags
+- [ ] Landing page: replace literal backticks in copy with <code> elements
+- [ ] README: add user-facing Download section up top (platform availability, latest release link)
+- [ ] README: drop rotting hard-coded test counts
+- [ ] Verify gh-pages deploy after changes
+
+## Backlog
+
+- Validator UI panel with click-to-navigate (frontend part of E1)
+- Inline editing, drag-and-drop, undo/redo, autosave (README roadmap items)
+- Dark/light theme toggle driven by consolidated theme tokens (after v6.0.1)
+- Custom SVG icon set to replace generic MUI icons (README roadmap "custom icons")

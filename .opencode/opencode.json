@@ -1,0 +1,14 @@
+{
+  "$schema": "https://opencode.ai/config.json",
+  "mcp": {
+    "powerplan": {
+      "type": "local",
+      "command": ["python", "-m", "powerplan"],
+      "enabled": true,
+      "environment": {
+        "PYTHONIOENCODING": "utf-8",
+        "PYTHONUNBUFFERED": "1"
+      }
+    }
+  }
+}

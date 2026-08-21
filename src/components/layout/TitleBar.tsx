@@ -6,6 +6,7 @@ import {
   FilterNone,
   DataObject,
 } from "@mui/icons-material";
+import { tokens } from "../../theme";
 
 interface TitleBarProps {
   fileName: string;
@@ -41,7 +42,7 @@ export function TitleBar({ fileName, isDirty, isMaximized, onMinimize, onToggleM
         }}
         onDoubleClick={onToggleMaximize}
       >
-        <DataObject sx={{ fontSize: 16, color: "#007acc" }} />
+        <DataObject sx={{ fontSize: 16, color: tokens.accent }} />
         <Typography variant="caption" sx={{ fontWeight: 600 }} data-testid="titlebar-filename">
           {isDirty ? "\u2022 " : ""}OpenT A2L Forge{fileName ? ` — ${fileName}` : ""}
         </Typography>

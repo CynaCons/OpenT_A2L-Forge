@@ -9,20 +9,70 @@ import {
 } from "@mui/icons-material";
 import { createElement } from "react";
 
+/**
+ * Variant A ("Refined VS Code") design tokens — the single source of truth
+ * for colors in the app. Components must import from here instead of using
+ * hardcoded hex literals. See docs/prototypes/visual-upgrade.html and PLAN v6.0.
+ */
+export const tokens = {
+  accent: "#3794ff",
+  bg: "#1e1e1e",
+  surface: "#252529",
+  surface2: "#2d2d33",
+  border: "#3c3c44",
+  textPrimary: "#d6d6dd",
+  textMuted: "#9d9daa",
+  selection: "rgba(55,148,255,0.18)",
+  statusError: "#9a3324",
+  // Darker accent shade for the status bar: white text on it must meet WCAG AA (≥4.5:1).
+  statusBarBg: "#1f6feb",
+} as const;
+
+/** Standard ASAP2 data types (superset used by create forms and editors). */
+export const DATA_TYPES = [
+  "UBYTE",
+  "SBYTE",
+  "UWORD",
+  "SWORD",
+  "ULONG",
+  "SLONG",
+  "A_UINT64",
+  "A_INT64",
+  "FLOAT16_IEEE",
+  "FLOAT32_IEEE",
+  "FLOAT64_IEEE",
+];
+
+export const CHARACTERISTIC_TYPES = ["VALUE", "CURVE", "MAP", "CUBOID", "VAL_BLK", "ASCII"];
+
+/** Per-entity-kind accent color (shared by tree icons, chips, form headers). */
+export function getEntityAccent(kind: string): string {
+  switch (kind) {
+    case "Measurement": return "#4ec9b0";
+    case "Characteristic": return "#ce9178";
+    case "AxisPts": return "#569cd6";
+    case "CompuMethod": return "#c586c0";
+    case "CompuVtab": return "#dcdcaa";
+    case "RecordLayout": return "#c586c0";
+    case "Module": return "#dcdcaa";
+    default: return tokens.textMuted;
+  }
+}
+
 export const ideTheme = createTheme({
   palette: {
     mode: "dark",
-    primary: { main: "#3794ff" },
+    primary: { main: tokens.accent },
     secondary: { main: "#b76e79" },
     background: {
-      default: "#1e1e1e",
-      paper: "#252526",
+      default: tokens.bg,
+      paper: tokens.surface,
     },
     text: {
-      primary: "#e7e7e7",
-      secondary: "#a0a0a0",
+      primary: tokens.textPrimary,
+      secondary: tokens.textMuted,
     },
-    divider: "#333333",
+    divider: tokens.border,
     action: {
       hover: "rgba(255, 255, 255, 0.08)",
       selected: "rgba(255, 255, 255, 0.12)",
@@ -38,6 +88,11 @@ export const ideTheme = createTheme({
     MuiButton: {
       styleOverrides: {
         root: { borderRadius: 4 },
+        // Contained buttons use the darker accent shade so white label text meets WCAG AA.
+        contained: {
+          backgroundColor: tokens.statusBarBg,
+          "&:hover": { backgroundColor: "#1b5fd0" },
+        },
       },
     },
     MuiPaper: {
@@ -51,10 +106,10 @@ export const ideTheme = createTheme({
           borderRadius: 4,
           marginBottom: 1,
           "&.Mui-selected": {
-            backgroundColor: "#37373d",
-            borderLeft: "3px solid #3794ff",
+            backgroundColor: tokens.selection,
+            borderLeft: `3px solid ${tokens.accent}`,
             paddingLeft: 13,
-            "&:hover": { backgroundColor: "#2a2d2e" },
+            "&:hover": { backgroundColor: tokens.surface2 },
           },
         },
       },
@@ -62,7 +117,8 @@ export const ideTheme = createTheme({
     MuiTooltip: {
       styleOverrides: {
         tooltip: {
-          backgroundColor: "#202020",
+          backgroundColor: "#101010",
+          color: tokens.textPrimary,
           border: "1px solid #454545",
           fontSize: 11,
         },
@@ -78,7 +134,7 @@ export function getKindColor(kind: string): string {
     case "Characteristic": return "#ce9178";
     case "AxisPts": return "#569cd6";
     case "RecordLayout": return "#c586c0";
-    default: return "#888";
+    default: return tokens.textMuted;
   }
 }
 

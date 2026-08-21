@@ -4,6 +4,7 @@ import {
   Button,
   Checkbox,
   Chip,
+  IconButton,
   MenuItem,
   Stack,
   Table,
@@ -12,6 +13,7 @@ import {
   TableContainer,
   TableHead,
   TableRow,
+  TableSortLabel,
   TextField,
   Typography,
   Tooltip,
@@ -24,6 +26,7 @@ import {
   KeyboardArrowRight,
 } from "@mui/icons-material";
 import type { A2lMetadata, ElfSymbol } from "../../types";
+import { tokens } from "../../theme";
 
 interface ElfMainPanelProps {
   elfSymbols: ElfSymbol[];
@@ -118,8 +121,8 @@ export function ElfMainPanel({
   };
 
   return (
-    <Box sx={{ flex: 1, display: "flex", flexDirection: "column", height: "100%", bgcolor: "#1e1e1e", overflow: "hidden" }}>
-      <Box sx={{ p: 2, px: 3, borderBottom: "1px solid #333", display: "flex", alignItems: "center", justifyContent: "space-between", height: 50, bgcolor: "#252526" }}>
+    <Box sx={{ flex: 1, display: "flex", flexDirection: "column", height: "100%", bgcolor: tokens.bg, overflow: "hidden" }}>
+      <Box sx={{ p: 2, px: 3, borderBottom: `1px solid ${tokens.border}`, display: "flex", alignItems: "center", justifyContent: "space-between", height: 50, bgcolor: tokens.surface }}>
         <Stack direction="row" spacing={2} alignItems="center">
           <MemoryIcon sx={{ color: "#4ec9b0" }} />
           <Typography variant="h6" sx={{ fontSize: 14 }}>ELF Symbols</Typography>
@@ -203,7 +206,7 @@ export function ElfMainPanel({
       )}
 
       {elfSymbols.length > 0 && (
-        <Box sx={{ p: 2, px: 3, borderBottom: "1px solid #333", bgcolor: "#252526" }}>
+        <Box sx={{ p: 2, px: 3, borderBottom: `1px solid ${tokens.border}`, bgcolor: tokens.surface }}>
           <TextField
             data-testid="search-elf"
             fullWidth
@@ -212,7 +215,7 @@ export function ElfMainPanel({
             value={elfSearchQuery}
             onChange={(e) => onElfSearchQueryChange(e.target.value)}
             InputProps={{
-              startAdornment: <SearchIcon sx={{ mr: 1, color: "#888" }} />,
+              startAdornment: <SearchIcon sx={{ mr: 1, color: "text.secondary" }} />,
             }}
             sx={{ mb: 1 }}
           />
@@ -276,13 +279,14 @@ export function ElfMainPanel({
       )}
 
       {elfSymbols.length > 0 ? (
-        <TableContainer sx={{ flex: 1, overflow: "auto" }} data-testid="elf-table">
+        <TableContainer sx={{ flex: 1, overflow: "auto" }} data-testid="elf-table" tabIndex={0} aria-label="ELF symbol table">
           <Table stickyHeader size="small">
             <TableHead>
               <TableRow>
-                <TableCell padding="checkbox" sx={{ bgcolor: "#1e1e1e" }}>
+                <TableCell padding="checkbox" sx={{ bgcolor: tokens.bg }}>
                   <Checkbox
                     data-testid="checkbox-select-all"
+                    inputProps={{ "aria-label": "Select all displayed symbols" }}
                     checked={selectableDisplayRows.length > 0 && selectableDisplayRows.every(s => selectedElfSymbols.has(s.name))}
                     indeterminate={selectableDisplayRows.some(s => selectedElfSymbols.has(s.name)) && !selectableDisplayRows.every(s => selectedElfSymbols.has(s.name))}
                     onChange={(e) => {
@@ -292,21 +296,29 @@ export function ElfMainPanel({
                     size="small"
                   />
                 </TableCell>
-                <TableCell data-testid="sort-name" sx={{ bgcolor: "#1e1e1e", fontWeight: 600, cursor: "pointer" }} onClick={() => handleSortClick("name")}>
-                  Name {elfSortColumn === "name" && (elfSortDirection === "asc" ? "↑" : "↓")}
+                <TableCell data-testid="sort-name" sx={{ bgcolor: tokens.bg, fontWeight: 600 }} sortDirection={elfSortColumn === "name" ? elfSortDirection : false}>
+                  <TableSortLabel active={elfSortColumn === "name"} direction={elfSortColumn === "name" ? elfSortDirection : "asc"} onClick={() => handleSortClick("name")}>
+                    Name
+                  </TableSortLabel>
                 </TableCell>
-                <TableCell data-testid="sort-address" sx={{ bgcolor: "#1e1e1e", fontWeight: 600, cursor: "pointer" }} onClick={() => handleSortClick("address")}>
-                  Address {elfSortColumn === "address" && (elfSortDirection === "asc" ? "↑" : "↓")}
+                <TableCell data-testid="sort-address" sx={{ bgcolor: tokens.bg, fontWeight: 600 }} sortDirection={elfSortColumn === "address" ? elfSortDirection : false}>
+                  <TableSortLabel active={elfSortColumn === "address"} direction={elfSortColumn === "address" ? elfSortDirection : "asc"} onClick={() => handleSortClick("address")}>
+                    Address
+                  </TableSortLabel>
                 </TableCell>
-                <TableCell data-testid="sort-size" sx={{ bgcolor: "#1e1e1e", fontWeight: 600, cursor: "pointer" }} onClick={() => handleSortClick("size")}>
-                  Size {elfSortColumn === "size" && (elfSortDirection === "asc" ? "↑" : "↓")}
+                <TableCell data-testid="sort-size" sx={{ bgcolor: tokens.bg, fontWeight: 600 }} sortDirection={elfSortColumn === "size" ? elfSortDirection : false}>
+                  <TableSortLabel active={elfSortColumn === "size"} direction={elfSortColumn === "size" ? elfSortDirection : "asc"} onClick={() => handleSortClick("size")}>
+                    Size
+                  </TableSortLabel>
                 </TableCell>
-                <TableCell data-testid="sort-type" sx={{ bgcolor: "#1e1e1e", fontWeight: 600, cursor: "pointer" }} onClick={() => handleSortClick("type")}>
-                  ELF Type {elfSortColumn === "type" && (elfSortDirection === "asc" ? "↑" : "↓")}
+                <TableCell data-testid="sort-type" sx={{ bgcolor: tokens.bg, fontWeight: 600 }} sortDirection={elfSortColumn === "type" ? elfSortDirection : false}>
+                  <TableSortLabel active={elfSortColumn === "type"} direction={elfSortColumn === "type" ? elfSortDirection : "asc"} onClick={() => handleSortClick("type")}>
+                    ELF Type
+                  </TableSortLabel>
                 </TableCell>
-                <TableCell sx={{ bgcolor: "#1e1e1e", fontWeight: 600 }}>A2L Type</TableCell>
-                <TableCell sx={{ bgcolor: "#1e1e1e", fontWeight: 600 }}>DWARF Type</TableCell>
-                <TableCell sx={{ bgcolor: "#1e1e1e", fontWeight: 600 }}>Section</TableCell>
+                <TableCell sx={{ bgcolor: tokens.bg, fontWeight: 600 }}>A2L Type</TableCell>
+                <TableCell sx={{ bgcolor: tokens.bg, fontWeight: 600 }}>DWARF Type</TableCell>
+                <TableCell sx={{ bgcolor: tokens.bg, fontWeight: 600 }}>Section</TableCell>
               </TableRow>
             </TableHead>
             <TableBody>
@@ -338,6 +350,7 @@ export function ElfMainPanel({
                       <TableCell padding="checkbox" onClick={e => e.stopPropagation()}>
                         <Checkbox
                         data-testid={`checkbox-elf-${row.name}`}
+                        inputProps={{ "aria-label": `Select struct ${row.name} and all members` }}
                         checked={allMembersSelected && someMembersSelected}
                         indeterminate={someMembersSelected && !allMembersSelected}
                         size="small"
@@ -348,7 +361,23 @@ export function ElfMainPanel({
                       </TableCell>
                       <TableCell sx={{ fontFamily: "monospace", fontWeight: 600 }}>
                         <Box sx={{ display: "flex", alignItems: "center", gap: 0.5 }}>
-                          {isCollapsed ? <KeyboardArrowRight sx={{ fontSize: 16, color: "#4ec9b0" }} /> : <KeyboardArrowDown sx={{ fontSize: 16, color: "#4ec9b0" }} />}
+                          <IconButton
+                            size="small"
+                            aria-expanded={!isCollapsed}
+                            aria-label={`${isCollapsed ? "Expand" : "Collapse"} struct ${row.name} (${memberCount} members)`}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              onCollapsedStructsChange(prev => {
+                                const next = new Set(prev);
+                                if (next.has(row.name)) next.delete(row.name);
+                                else next.add(row.name);
+                                return next;
+                              });
+                            }}
+                            sx={{ p: 0.25, color: "#4ec9b0" }}
+                          >
+                            {isCollapsed ? <KeyboardArrowRight sx={{ fontSize: 16 }} /> : <KeyboardArrowDown sx={{ fontSize: 16 }} />}
+                          </IconButton>
                           {row.name}
                           <Chip label={`struct · ${memberCount}`} size="small" sx={{ height: 14, fontSize: 9, ml: 0.5, bgcolor: "rgba(78,201,176,0.15)", color: "#4ec9b0" }} />
                         </Box>
@@ -361,7 +390,7 @@ export function ElfMainPanel({
                       <TableCell><Chip label={row.type_str} size="small" variant="outlined" sx={{ height: 16, fontSize: 10 }} /></TableCell>
                       <TableCell><Chip label="struct" size="small" variant="outlined" sx={{ height: 16, fontSize: 10, color: "#4ec9b0", borderColor: "#4ec9b0" }} /></TableCell>
                       <TableCell sx={{ fontFamily: "monospace", color: "#4ec9b0", fontSize: 11 }}>{row.dwarf_type || "—"}</TableCell>
-                      <TableCell sx={{ color: "#888" }}>{row.section}</TableCell>
+                      <TableCell sx={{ color: "text.secondary" }}>{row.section}</TableCell>
                     </TableRow>
                   );
                 }
@@ -375,6 +404,7 @@ export function ElfMainPanel({
                     <TableCell padding="checkbox">
                       <Checkbox
                         data-testid={`checkbox-elf-${row.name}`}
+                        inputProps={{ "aria-label": `Select symbol ${row.name}` }}
                         checked={selectedElfSymbols.has(row.name)}
                         size="small"
                       />
@@ -382,7 +412,7 @@ export function ElfMainPanel({
                     <TableCell sx={{ fontFamily: "monospace", pl: row.is_struct_member ? 4 : undefined }}>
                       {row.is_struct_member ? memberPath : row.name}
                       {row.is_struct_member && (
-                        <Typography component="span" sx={{ color: "#666", fontSize: 10, ml: 0.5, fontFamily: "monospace" }}>
+                        <Typography component="span" sx={{ color: "text.secondary", fontSize: 10, ml: 0.5, fontFamily: "monospace" }}>
                           ({row.name})
                         </Typography>
                       )}
@@ -394,10 +424,10 @@ export function ElfMainPanel({
                     <TableCell sx={{ fontFamily: "monospace", color: "#4ec9b0" }}>0x{row.size.toString(16).toUpperCase()}</TableCell>
                     <TableCell><Chip label={row.type_str} size="small" variant="outlined" sx={{ height: 16, fontSize: 10 }} /></TableCell>
                     <TableCell><Chip label={row.suggested_a2l_type} size="small" color="primary" sx={{ height: 16, fontSize: 10 }} /></TableCell>
-                    <TableCell sx={{ fontFamily: "monospace", color: row.dwarf_type ? "#ce9178" : "#555", fontSize: 11 }}>
+                    <TableCell sx={{ fontFamily: "monospace", color: row.dwarf_type ? "#ce9178" : tokens.textMuted, fontSize: 11 }}>
                       {row.dwarf_type || "—"}
                     </TableCell>
-                    <TableCell sx={{ color: "#888" }}>{row.section}</TableCell>
+                    <TableCell sx={{ color: "text.secondary" }}>{row.section}</TableCell>
                   </TableRow>
                 );
               })}

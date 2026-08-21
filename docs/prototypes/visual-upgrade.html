@@ -1,0 +1,495 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>OpenT A2L-Forge — Visual Upgrade Prototype (v6.0)</title>
+<style>
+/* ============ PAGE CHROME ============ */
+* { margin:0; padding:0; box-sizing:border-box; }
+body {
+  font-family: "Segoe UI", Inter, system-ui, sans-serif;
+  background:#111114; color:#d4d4d4; min-height:100vh;
+}
+.proto-header {
+  position:sticky; top:0; z-index:50;
+  background:rgba(17,17,20,.92); backdrop-filter:blur(8px);
+  border-bottom:1px solid #2a2a30; padding:14px 24px;
+  display:flex; align-items:center; gap:18px; flex-wrap:wrap;
+}
+.proto-header h1 { font-size:15px; font-weight:600; color:#fff; }
+.proto-header .sub { font-size:12px; color:#888; }
+.spacer { flex:1; }
+.seg { display:inline-flex; background:#1c1c22; border:1px solid #33333c; border-radius:8px; padding:3px; gap:2px; }
+.seg button {
+  border:none; background:transparent; color:#9a9aa5; padding:7px 16px;
+  font-size:12.5px; font-weight:600; border-radius:6px; cursor:pointer; transition:.15s;
+}
+.seg button:hover { color:#e0e0e6; }
+.seg button.on { background:#3794ff; color:#fff; }
+.toggle {
+  display:inline-flex; align-items:center; gap:8px; font-size:12.5px; color:#9a9aa5; cursor:pointer;
+  user-select:none; padding:7px 14px; border:1px solid #33333c; border-radius:8px; background:#1c1c22;
+}
+.toggle input { accent-color:#3794ff; }
+.compare-wrap { display:grid; gap:28px; }
+.compare-wrap.dual { grid-template-columns:1fr 1fr; }
+@media (max-width:1400px){ .compare-wrap.dual { grid-template-columns:1fr; } }
+.pane-label {
+  font-size:11px; letter-spacing:2px; text-transform:uppercase; color:#777;
+  margin-bottom:10px; display:flex; align-items:center; gap:8px;
+}
+.pane-label b { color:#c8c8d0; }
+.tag-cur { background:#5a2a2a; color:#f0b0b0; padding:2px 8px; border-radius:4px; font-size:10px; }
+.tag-new { background:#1e4038; color:#7de8cd; padding:2px 8px; border-radius:4px; font-size:10px; }
+
+.section { max-width:1500px; margin:0 auto; padding:34px 24px 10px; }
+.section > h2 { font-size:13px; letter-spacing:2.5px; text-transform:uppercase; color:#6fa8dc; margin-bottom:4px; font-weight:700; }
+.section > p.desc { font-size:13px; color:#909098; margin-bottom:18px; max-width:900px; line-height:1.55; }
+
+.notes { max-width:1500px; margin:14px auto 46px; padding:0 24px; }
+.notes ol { list-style:none; display:grid; grid-template-columns:repeat(auto-fit,minmax(300px,1fr)); gap:10px; }
+.notes li {
+  font-size:12.5px; color:#a8a8b2; line-height:1.5; background:#18181d;
+  border:1px solid #26262e; border-radius:8px; padding:10px 14px 10px 34px; position:relative;
+}
+.notes li::before {
+  content:attr(data-n); position:absolute; left:10px; top:9px; width:17px; height:17px;
+  background:#3794ff; color:#fff; border-radius:50%; font-size:10px; font-weight:700;
+  display:flex; align-items:center; justify-content:center;
+}
+.notes li b { color:#dde; }
+
+footer.proto-foot { text-align:center; color:#666; font-size:12px; padding:30px 20px 50px; }
+
+/* ============ APP SHELL MOCK — CURRENT ============ */
+.shell { --r:4px; --shadow:none;
+  background:var(--s-bg); border:1px solid #000; border-radius:10px; overflow:hidden;
+  box-shadow:0 24px 70px rgba(0,0,0,.5); font-family:var(--font); font-size:var(--fs);
+  height:auto; min-width:0;
+}
+.shell.cur {
+  /* current implementation palette */
+  --s-bg:#1e1e1e; --surface:#252526; --surface2:#2d2d2d; --border:#333333;
+  --chrome:#333333; --text:#cccccc; --muted:#777777; --accent:#007acc; --accent2:#007acc;
+  --row-hover:rgba(255,255,255,.06); --sel:#37373d;
+  --font:'Segoe UI',sans-serif; --fs:12px; --mono:'Consolas',monospace;
+  --radius:0px; --pad:1;
+}
+/* Variant A — Refined VS Code */
+.shell.vA {
+  --s-bg:#1e1e1e; --surface:#252529; --surface2:#2d2d33; --border:#3c3c44;
+  --chrome:#252529; --text:#d6d6dd; --muted:#9d9daa; --accent:#3794ff; --accent2:#3794ff;
+  --row-hover:rgba(255,255,255,.07); --sel:rgba(55,148,255,.18);
+  --font:'Segoe UI',sans-serif; --fs:12.5px; --mono:'Cascadia Code','Consolas',monospace;
+  --radius:5px; --pad:1.15;
+}
+/* Variant B — Elevated Dark */
+.shell.vB {
+  --s-bg:#161619; --surface:#1f1f24; --surface2:#27272e; --border:#34343e;
+  --chrome:#1b1b1f; --text:#e2e2ea; --muted:#a4a4b4; --accent:#4ec9b0; --accent2:#569cd6;
+  --row-hover:rgba(255,255,255,.06); --sel:rgba(78,201,176,.16);
+  --font:'Inter','Segoe UI',sans-serif; --fs:13px; --mono:'JetBrains Mono','Cascadia Code',monospace;
+  --radius:9px; --pad:1.35;
+}
+/* Variant C — Graphite Instrument */
+.shell.vC {
+  --s-bg:#1a1a1c; --surface:#222225; --surface2:#2a2a2e; --border:#3a3a40;
+  --chrome:#222225; --text:#cfd2d6; --muted:#989ca4; --accent:#007acc; --accent2:#007acc;
+  --row-hover:rgba(255,255,255,.05); --sel:rgba(0,122,204,.20);
+  --font:'IBM Plex Sans','Segoe UI',sans-serif; --fs:12px; --mono:'IBM Plex Mono','Consolas',monospace;
+  --radius:2px; --pad:0.92;
+}
+
+/* chrome rows */
+.titlebar { height:32px; background:var(--chrome); display:flex; align-items:center; border-bottom:1px solid var(--border); flex-shrink:0; }
+.titlebar .tb-ic { width:32px; display:flex; justify-content:center; color:var(--accent); }
+.titlebar .tb-name { font-size:11.5px; color:var(--text); opacity:.85; }
+.titlebar .tb-name i { color:var(--muted); font-style:normal; margin-right:4px; }
+.titlebar .tb-btns { margin-left:auto; display:flex; height:100%; }
+.titlebar .tb-btns span { width:40px; display:flex; align-items:center; justify-content:center; color:var(--muted); font-size:10px; }
+.titlebar .tb-btns span:last-child:hover { background:#c42b1c; color:#fff; }
+.menubar { height:28px; background:var(--chrome); display:flex; align-items:center; padding:0 8px; gap:2px; border-bottom:1px solid var(--border); }
+.menubar .m-item { font-size:11.5px; color:var(--muted); padding:calc(3px * var(--pad)) calc(8px * var(--pad)); border-radius:calc(var(--radius) * .7); }
+.menubar .m-item.hov { background:var(--surface2); color:var(--text); outline:1px solid var(--border); }
+.body-row { display:flex; height:auto; min-height:520px; }
+.activitybar { width:48px; background:var(--chrome); display:flex; flex-direction:column; align-items:center; padding-top:6px; gap:4px; border-right:1px solid transparent; }
+.abtn { width:48px; height:44px; display:flex; align-items:center; justify-content:center; color:var(--muted); font-size:19px; position:relative; cursor:pointer; }
+.abtn.on { color:#fff; }
+.shell.cur .abtn.on::after, .shell.vA .abtn.on::after { content:""; position:absolute; left:0; top:8px; bottom:8px; width:2px; background:var(--accent); }
+.shell.vB .abtn.on { background:var(--sel); border-radius:calc(var(--radius)*1.2); color:#fff; width:40px; margin-left:4px; }
+.shell.vC .abtn.on::after { content:""; position:absolute; right:0; top:6px; bottom:6px; width:2px; background:var(--accent); }
+.sidebar { width:250px; background:var(--surface); border-right:1px solid var(--border); display:flex; flex-direction:column; }
+.main { flex:1; background:var(--s-bg); display:flex; flex-direction:column; min-width:0; }
+.statusbar { height:22px; background:var(--accent); color:#fff; display:flex; align-items:center; padding:0 10px; gap:14px; font-size:11px; flex-shrink:0; }
+.statusbar .sb-right { margin-left:auto; display:flex; gap:14px; opacity:.85; }
+
+/* sidebar content */
+.side-head { display:flex; align-items:center; padding:calc(9px*var(--pad)) calc(14px*var(--pad)) calc(5px*var(--pad)); }
+.side-head span { font-size:10.5px; letter-spacing:1.6px; color:var(--muted); text-transform:uppercase; }
+.side-head .acts { margin-left:auto; display:flex; gap:2px; }
+.side-head .acts i { font-style:normal; font-size:13px; width:22px; height:22px; display:flex; align-items:center; justify-content:center; color:var(--muted); border-radius:calc(var(--radius)*.8); }
+.side-head .acts i.hov { background:var(--surface2); color:var(--text); }
+.search { margin:2px calc(10px*var(--pad)) calc(8px*var(--pad)); }
+.search .box {
+  display:flex; align-items:center; gap:6px; background:var(--surface2);
+  border:1px solid var(--border); border-radius:calc(var(--radius)*1.4); padding:calc(5px*var(--pad)) 9px;
+  color:var(--muted); font-size:12px;
+}
+.tree { overflow:hidden; }
+.tgroup { font-size:11px; color:var(--muted); padding:calc(3px*var(--pad)) 0 calc(3px*var(--pad)) 14px; display:flex; gap:6px; align-items:center; }
+.titem {
+  display:flex; align-items:center; gap:8px; padding:calc(4.5px*var(--pad)) 10px calc(4.5px*var(--pad)) 26px;
+  color:var(--text); cursor:pointer; font-size:12px; border-left:2px solid transparent;
+}
+.titem .dot { width:6px; height:6px; border-radius:50%; flex-shrink:0; }
+.titem.sel { background:var(--sel); border-left-color:transparent; }
+.shell.cur .titem.sel { background:#37373d !important; }
+.shell:not(.cur) .titem.sel { border-radius:calc(var(--radius)*1.2); }
+.shell:not(.cur):not(.vB) .titem.sel { border-left:2px solid var(--accent); }
+.badge { margin-left:auto; font-size:9.5px; background:var(--surface2); color:var(--muted); border-radius:8px; padding:1px 7px; }
+.loadmore { font-size:11.5px; color:var(--accent); padding:calc(6px*var(--pad)) 26px; cursor:pointer; }
+
+/* entity detail */
+.detail-head { display:flex; align-items:center; gap:10px; padding:calc(9px*var(--pad)) calc(16px*var(--pad)); background:var(--surface); border-bottom:1px solid var(--border); }
+.crumb { font-size:11px; color:var(--muted); }
+.kindchip { font-size:10px; padding:2px 9px; border-radius:calc(var(--radius)*2 + 4px); font-weight:600; }
+.editbtn { margin-left:auto; font-size:11.5px; font-weight:600; color:#fff; background:var(--accent); padding:calc(4px*var(--pad)) calc(12px*var(--pad)); border-radius:calc(var(--radius)*1.4); cursor:pointer; }
+.shell:not(.cur) .editbtn.hov { filter:brightness(1.12); }
+.detail-body { padding:calc(16px*var(--pad)) calc(22px*var(--pad)); max-width:860px; }
+.ent-title { display:flex; align-items:center; gap:12px; margin-bottom:6px; }
+.ent-icon { width:36px; height:36px; border-radius:calc(var(--radius)*1.6); display:flex; align-items:center; justify-content:center; font-size:18px; }
+.ent-title h3 { font-size:15px; color:#fff; font-weight:600; font-family:var(--mono); }
+.ent-desc { font-size:12.5px; color:var(--muted); font-style:italic; margin-bottom:calc(14px*var(--pad)); }
+.sect-h { font-size:10.5px; letter-spacing:1.8px; text-transform:uppercase; color:var(--muted); padding-bottom:5px; border-bottom:1px solid var(--border); margin:calc(16px*var(--pad)) 0 calc(4px*var(--pad)); display:flex; align-items:center; gap:8px; }
+.shell:not(.cur) .sect-h::before { content:""; width:14px; height:2px; background:var(--accent); border-radius:2px; }
+.prow { display:grid; grid-template-columns:170px 1fr; font-size:12.5px; }
+.shell:not(.cur) .prow { border-radius:calc(var(--radius)*.9); }
+.prow .pl { color:var(--muted); text-transform:uppercase; font-size:10.8px; letter-spacing:.6px; padding:calc(6.5px*var(--pad)) 8px; }
+.prow .pv { color:var(--text); font-family:var(--mono); padding:calc(6.5px*var(--pad)) 8px; }
+.prow:nth-child(even) { background:rgba(255,255,255,.02); }
+.warnhex { color:#e5a05a; }
+
+/* ELF table */
+.table-wrap { margin:calc(10px*var(--pad)) calc(16px*var(--pad)) calc(16px*var(--pad)); border:1px solid var(--border); border-radius:calc(var(--radius)*1.6); overflow:hidden; }
+table.sym { width:100%; border-collapse:collapse; font-size:12px; }
+table.sym th {
+  text-align:left; font-size:10.5px; letter-spacing:1px; text-transform:uppercase; color:var(--muted);
+  background:var(--surface); padding:calc(7px*var(--pad)) 12px; border-bottom:1px solid var(--border);
+}
+table.sym th.sortable-on { color:var(--accent); cursor:pointer; }
+table.sym td { padding:calc(6.5px*var(--pad)) 12px; border-bottom:1px solid rgba(255,255,255,.04); font-family:var(--mono); font-size:11.5px; color:var(--text); }
+tr.parent td { background:var(--sel); }
+tr.member td:first-child { padding-left:30px; color:var(--muted); }
+.typchip { font-size:9.5px; padding:1px 8px; border-radius:9px; background:var(--surface2); color:var(--muted); border:1px solid var(--border); }
+.cb { display:inline-block; width:13px; height:13px; border:1.5px solid var(--muted); border-radius:calc(var(--radius)*.7); vertical-align:-2px; }
+.cb.on { background:var(--accent); border-color:var(--accent); position:relative; }
+.cb.on::after { content:"✓"; color:#fff; font-size:9px; position:absolute; inset:0; display:flex; align-items:center; justify-content:center; }
+
+/* dialog mock */
+.dlg-backdrop { background:var(--s-bg); padding:calc(14px*var(--pad)) calc(16px*var(--pad)) calc(18px*var(--pad)); }
+.dlg { background:var(--surface); border:1px solid var(--border); border-radius:calc(var(--radius)*2.6); overflow:hidden; box-shadow:var(--shadow); }
+.dlg-head { display:flex; align-items:center; padding:calc(13px*var(--pad)) calc(18px*var(--pad)); border-bottom:1px solid var(--border); }
+.dlg-head h4 { font-size:13.5px; color:#fff; font-weight:600; }
+.typepick { margin-left:auto; display:flex; align-items:center; gap:8px; font-size:11.5px; color:var(--muted); }
+.typebox { display:flex; gap:3px; }
+.typebox span { font-size:10.5px; padding:calc(3.5px*var(--pad)) 10px; border-radius:calc(var(--radius)*1.6); color:var(--muted); border:1px solid transparent; cursor:pointer; }
+.typebox span.on { background:var(--sel); color:var(--accent2); border-color:var(--accent2); }
+.dlg-body { padding:calc(14px*var(--pad)) calc(18px*var(--pad)); }
+.frow { display:grid; grid-template-columns:1fr 1fr; gap:calc(12px*var(--pad)); margin-bottom:calc(11px*var(--pad)); }
+.fld label { display:block; font-size:10.5px; letter-spacing:1px; text-transform:uppercase; color:var(--muted); margin-bottom:5px; }
+.fld .inp {
+  background:var(--surface2); border:1px solid var(--border); border-radius:calc(var(--radius)*1.4);
+  padding:calc(7px*var(--pad)) 10px; font-size:12.5px; color:var(--text); font-family:var(--mono);
+}
+.fld .inp.focus { border-color:var(--accent); box-shadow:0 0 0 1px var(--accent); }
+.fld .hint { font-size:10.5px; color:var(--muted); margin-top:4px; }
+.dlg-foot { display:flex; justify-content:flex-end; gap:10px; padding:calc(12px*var(--pad)) calc(18px*var(--pad)); border-top:1px solid var(--border); }
+.btn2 { font-size:12px; font-weight:600; padding:calc(6px*var(--pad)) calc(16px*var(--pad)); border-radius:calc(var(--radius)*1.4); cursor:pointer; }
+.btn2.ghost { color:var(--muted); border:1px solid var(--border); }
+.btn2.primary { color:#fff; background:var(--accent); }
+.shell.vB .btn2.primary { background:linear-gradient(120deg,var(--accent),var(--accent2)); }
+
+/* banner / toast row */
+.feed-row { display:flex; gap:calc(12px*var(--pad)); padding:calc(4px*var(--pad)) calc(16px*var(--pad)) calc(16px*var(--pad)); flex-wrap:wrap; }
+.banner { display:flex; align-items:center; gap:10px; font-size:12px; padding:calc(8px*var(--pad)) 14px; border-radius:calc(var(--radius)*1.6); flex:1; min-width:260px; }
+.banner.info { background:rgba(78,201,176,.1); border:1px solid rgba(78,201,176,.35); color:#7de8cd; }
+.banner.err { background:rgba(200,80,80,.12); border:1px solid rgba(220,100,100,.4); color:#f0a8a8; }
+.banner a { color:inherit; font-weight:700; text-decoration:underline; cursor:pointer; margin-left:6px; }
+.banner .x { margin-left:auto; cursor:pointer; opacity:.7; }
+
+/* focus ring demo */
+.focustest { outline:none; }
+.focustest:focus-visible { outline:2px solid var(--accent); outline-offset:1px; border-radius:calc(var(--radius)); }
+.kbd { font-family:var(--mono); font-size:10px; background:var(--surface2); border:1px solid var(--border); border-bottom-width:2px; border-radius:4px; padding:1px 6px; color:var(--text); }
+</style>
+</head>
+<body>
+
+<div class="proto-header">
+  <div>
+    <h1>A2L-Forge · Visual Upgrade Prototype</h1>
+    <div class="sub">v6.0 proposal — interactive preview, no app code touched</div>
+  </div>
+  <div class="spacer"></div>
+  <div class="seg" id="variantSeg">
+    <button data-v="vA" class="on">A · Refined VS Code</button>
+    <button data-v="vB">B · Elevated Dark</button>
+    <button data-v="vC">C · Graphite Instrument</button>
+  </div>
+  <label class="toggle"><input type="checkbox" id="cmpToggle"> Compare with current</label>
+</div>
+
+<!-- ================= SECTION 1 ================= -->
+<div class="section">
+  <h2>1 · App Shell &amp; Chrome</h2>
+  <p class="desc">Titlebar, menu bar, activity bar, status bar. The prototype fixes the three competing accent blues (#007acc / #3794ff / #0e639c) to one token-driven accent per variant, and lifts contrast on inactive icons.</p>
+</div>
+<div class="notes"><ol>
+  <li data-n="1"><b>One accent.</b> Titlebar logo, activity indicator, buttons and status bar all use the single <code>--accent</code> token (A/C: blue family, B: teal→blue).</li>
+  <li data-n="2"><b>Contrast fix.</b> Inactive activity-bar icons go from ~2.9:1 (40% white) to ≥4.5:1 muted tone; active state gets an accent pill/edge.</li>
+  <li data-n="3"><b>Radius &amp; density tokens.</b> Each variant ships a consistent radius/padding scale instead of ad-hoc values (B is softest, C is densest).</li>
+  <li data-n="4"><b>Status bar.</b> Uses the same accent as the rest of the UI; error state stays red but with accessible text.</li>
+</ol></div>
+
+<!-- ================= SECTION 2 ================= -->
+<div class="section">
+  <h2>2 · Explorer Tree</h2>
+  <p class="desc">Entity tree with kind colors preserved. Selection becomes an accent-tinted rounded row with an edge marker (instead of hardcoded <code>#37373d !important</code>); search field shows the proposed focus ring.</p>
+</div>
+
+<!-- ================= SECTION 3 ================= -->
+<div class="section">
+  <h2>3 · Entity Detail View</h2>
+  <p class="desc">Properties grid with section headers. Muted grays (#666/#777) are replaced by accessible tones, section headers get a small accent tick, zebra rows get slightly more visible separation in variants.</p>
+</div>
+
+<!-- ================= SECTION 4 ================= -->
+<div class="section">
+  <h2>4 · Create Entity Dialog</h2>
+  <p class="desc">The entity-type selector moves out of the dialog title into a segmented picker in the body (current UX puts it inside DialogTitle). Inputs show the unified focus treatment. Try tabbing through fields.</p>
+</div>
+
+<!-- ================= SECTION 5 ================= -->
+<div class="section">
+  <h2>5 · ELF Symbol Table</h2>
+  <p class="desc">Struct parent/member rows, checkboxes, sortable headers. Sortable column headers become keyboard-operable buttons with visible focus (Tab to them), and the active sort gets an accent arrow chip.</p>
+</div>
+
+<!-- ================= SECTION 6 ================= -->
+<div class="section">
+  <h2>6 · Feedback: Banners, Toasts &amp; Focus States</h2>
+  <p class="desc">ELF-change notification banner, error status, and keyboard focus visibility. The dismiss “×” becomes a real focusable control.</p>
+</div>
+
+<div id="mount"></div>
+
+<footer class="proto-foot">
+  OpenT A2L-Forge — visual upgrade prototype · static HTML, no dependencies · maps to PLAN v6.0.1–v6.0.3
+</footer>
+
+<template id="shellTpl">
+<div class="shell cur" tabindex="-1">
+  <!-- chrome -->
+  <div class="titlebar">
+    <div class="tb-ic">◆</div>
+    <div class="tb-name"><i>•</i>engine_cal.a2l</div>
+    <div class="tb-btns"><span>—</span><span>▢</span><span>✕</span></div>
+  </div>
+  <div class="menubar">
+    <span class="m-item hov">File</span><span class="m-item">Edit</span><span class="m-item">View</span><span class="m-item">Help</span>
+  </div>
+  <div class="body-row">
+    <div class="activitybar">
+      <div class="abtn on focustest" title="Explorer">🗂</div>
+      <div class="abtn focustest" title="ELF Inspector">⚙</div>
+      <div style="flex:1"></div>
+      <div class="abtn focustest" title="Settings">⚑</div>
+    </div>
+    <div class="sidebar">
+      <div class="side-head"><span>Explorer</span>
+        <div class="acts"><i class="hov focustest" title="New">＋</i><i class="hov focustest" title="Save">💾</i><i class="hov focustest" title="Create">✎</i><i class="hov focustest" title="Delete">🗑</i></div>
+      </div>
+      <div class="search"><div class="box focus focustest">🔍 engine_cal.a2l<span style="margin-left:auto">✕</span></div></div>
+      <div class="tree">
+        <div class="tgroup">▾ 📦 ENGINE_MODULE <span class="badge">1284</span></div>
+        <div class="titem sel focustest"><span class="dot" style="background:#4ec9b0"></span>engine_speed</div>
+        <div class="titem focustest"><span class="dot" style="background:#4ec9b0"></span>lambda_voltage</div>
+        <div class="titem focustest"><span class="dot" style="background:#ce9178"></span>inj_map_main</div>
+        <div class="titem focustest"><span class="dot" style="background:#ce9178"></span>ignition_angle</div>
+        <div class="titem focustest"><span class="dot" style="background:#569cd6"></span>rpm_axis</div>
+        <div class="titem focustest"><span class="dot" style="background:#c586c0"></span>__val_UBYTE</div>
+        <div class="loadmore">Load 500 more (784 remaining)</div>
+      </div>
+    </div>
+    <div class="main">
+      <div class="detail-head">
+        <span class="crumb">ENGINE_MODULE / MEASUREMENTS /</span>
+        <span class="kindchip" style="background:rgba(78,201,176,.15);color:#4ec9b0">MEASUREMENT</span>
+        <span class="editbtn focustest">Edit Entity</span>
+      </div>
+      <div class="detail-body">
+        <div class="ent-title">
+          <div class="ent-icon focustest" style="background:rgba(78,201,176,.12)">📈</div>
+          <div>
+            <h3>engine_speed</h3>
+          </div>
+        </div>
+        <div class="ent-desc">Engine speed feedback from crank sensor, filtered</div>
+
+        <div class="sect-h">Data Type &amp; Conversion</div>
+        <div class="prow"><span class="pl">Datatype</span><span class="pv">UWORD</span></div>
+        <div class="prow"><span class="pl">Conversion</span><span class="pv">cm_engine_speed</span></div>
+        <div class="sect-h">Limits &amp; Range</div>
+        <div class="prow"><span class="pl">Lower limit</span><span class="pv">0</span></div>
+        <div class="prow"><span class="pl">Upper limit</span><span class="pv">8000</span></div>
+        <div class="sect-h">Address &amp; Layout</div>
+        <div class="prow"><span class="pl">ECU address</span><span class="pv warnhex">0x0A3F21B4 ⚠</span></div>
+      </div>
+    </div>
+  </div>
+  <div class="statusbar">
+    <span>✓ A2L saved</span>
+    <div class="sb-right"><span>📄 engine_cal.a2l</span><span>⚙ debugdata_gcc.elf</span><span>UTF-8</span></div>
+  </div>
+</div>
+</template>
+
+<template id="dlgTpl">
+<div class="shell cur">
+  <div class="dlg-backdrop">
+    <div class="dlg">
+      <div class="dlg-head">
+        <h4>Create Entity</h4>
+        <div class="typepick">
+          <span>Type</span>
+          <div class="typebox">
+            <span class="on focustest">Measurement</span><span class="focustest">Characteristic</span><span class="focustest">AxisPts</span><span class="focustest">CompuMethod</span>
+          </div>
+        </div>
+      </div>
+      <div class="dlg-body">
+        <div class="frow">
+          <div class="fld"><label>Name *</label><div class="inp focus focustest" tabindex="0">engine_torque_target</div><div class="hint">Unique within module</div></div>
+          <div class="fld"><label>Data type</label><div class="inp focustest" tabindex="0">FLOAT32_IEEE ▾</div></div>
+        </div>
+        <div class="fld" style="margin-bottom:11px"><label>Long identifier</label><div class="inp focustest" tabindex="0">Target engine torque from ECU torque structure map</div></div>
+        <div class="frow">
+          <div class="fld"><label>Lower limit</label><div class="inp focustest" tabindex="0">0</div></div>
+          <div class="fld"><label>Upper limit</label><div class="inp focustest" tabindex="0">400</div></div>
+        </div>
+        <div class="frow">
+          <div class="fld"><label>Conversion</label><div class="inp focustest" tabindex="0">cm_Nm ▾</div></div>
+          <div class="fld"><label>Unit (from CompuMethod)</label><div class="inp" style="opacity:.55">Nm</div></div>
+        </div>
+      </div>
+      <div class="dlg-foot">
+        <span class="btn2 ghost focustest" tabindex="0">Cancel&nbsp;&nbsp;<span class="kbd">Esc</span></span>
+        <span class="btn2 primary focustest hov" tabindex="0">Create Entity&nbsp;&nbsp;<span class="kbd">Ctrl↵</span></span>
+      </div>
+    </div>
+  </div>
+</div>
+</template>
+
+<template id="elfTpl">
+<div class="shell cur">
+  <div class="main" style="min-height:0">
+    <div class="detail-head">
+      <span style="color:#4ec9b0">⚙</span>
+      <b style="font-size:12.5px;color:#fff;font-weight:600">debugdata_gcc.elf</b>
+      <span class="badge" style="margin-left:6px">312 symbols</span>
+      <span class="editbtn focustest">Add to Project</span>
+    </div>
+    <div class="table-wrap">
+      <table class="sym">
+        <thead><tr>
+          <th style="width:34px"><span class="cb on"></span></th>
+          <th class="sortable-on focustest" tabindex="0">Name ↓</th>
+          <th class="focustest" tabindex="0">Address</th>
+          <th class="focustest" tabindex="0">Size</th>
+          <th class="focustest" tabindex="0">Type</th>
+          <th class="focustest" tabindex="0">DWARF type</th>
+        </tr></thead>
+        <tbody>
+          <tr class="parent"><td><span class="cb on"></span></td><td>▾ struct_b</td><td>0x2000_0100</td><td>48 B</td><td><span class="typchip">struct · 3</span></td><td>StructB</td></tr>
+          <tr class="member"><td><span class="cb on"></span></td><td>s1.val_i32</td><td>0x2000_0100</td><td>4 B</td><td><span class="typchip">OBJECT</span></td><td>int32_t</td></tr>
+          <tr class="member"><td><span class="cb"></span></td><td>s2.val_f32</td><td>0x2000_0104</td><td>4 B</td><td><span class="typchip">OBJECT</span></td><td>float</td></tr>
+          <tr class="member"><td><span class="cb"></span></td><td>s1.enumval</td><td>0x2000_0108</td><td>1 B</td><td><span class="typchip">OBJECT</span></td><td>enum Mode</td></tr>
+          <tr><td><span class="cb"></span></td><td>engine_rpm_axis</td><td class="warnhex">0x1_FFFF_FFF8 ⚠</td><td>8 B</td><td><span class="typchip">ARRAY</span></td><td>uint32_t[2]</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <div class="feed-row">
+      <div class="banner info">🔄 ELF file changed on disk <a>Update ECU Addresses</a><a>Dismiss</a><span class="x">✕</span></div>
+      <div class="banner err">⚠ Import failed: 2 conflicts unresolved <a>Review</a><span class="x focustest" tabindex="0">✕</span></div>
+    </div>
+  </div>
+</div>
+</template>
+
+<script>
+(function(){
+  const mount = document.getElementById('mount');
+  const seg = document.getElementById('variantSeg');
+  const cmp = document.getElementById('cmpToggle');
+  const sections = [
+    { tpl:'shellTpl', anchor:null },
+    { tpl:'shellTpl', anchor:2 }, { tpl:'shellTpl', anchor:3 },
+    { tpl:'dlgTpl', anchor:4 },
+    { tpl:'elfTpl', anchor:5 },
+    { tpl:'elfTpl', anchor:6 },
+  ];
+  let variant = 'vA';
+
+  function build(){
+    mount.innerHTML = '';
+    document.querySelectorAll('template').forEach(t=>{
+      const idx = sections.findIndex(s=>s.tpl===t.id && true);
+    });
+    // place each template's instances after its matching section
+    document.querySelectorAll('.section').forEach(sec => {});
+    const order = ['shellTpl','shellTpl','shellTpl','dlgTpl','elfTpl','elfTpl'];
+    const secEls = document.querySelectorAll('.section');
+    // remove previously inserted blocks
+    document.querySelectorAll('[data-proto-block]').forEach(b=>b.remove());
+    order.forEach((tplId, i)=>{
+      const block = document.createElement('div');
+      block.setAttribute('data-proto-block','');
+      const wrap = document.createElement('div'); wrap.className='compare-wrap';
+      if(cmp.checked){
+        wrap.classList.add('dual');
+        const paneCur = document.createElement('div');
+        paneCur.innerHTML = '<div class="pane-label"><span class="tag-cur">CURRENT</span> <b>as implemented today</b></div>';
+        const s1 = document.getElementById(tplId).content.firstElementChild.cloneNode(true);
+        s1.classList.add('cur'); paneCur.appendChild(s1);
+        const paneNew = document.createElement('div');
+        paneNew.innerHTML = '<div class="pane-label"><span class="tag-new">PROPOSED</span> <b>'+seg.querySelector('.on').textContent+'</b></div>';
+        const s2 = document.getElementById(tplId).content.firstElementChild.cloneNode(true);
+        s2.classList.remove('cur'); s2.classList.add(variant); paneNew.appendChild(s2);
+        wrap.append(paneCur, paneNew);
+      } else {
+        const s = document.getElementById(tplId).content.firstElementChild.cloneNode(true);
+        s.classList.remove('cur'); s.classList.add(variant);
+        wrap.appendChild(s);
+      }
+      block.appendChild(wrap);
+      const notes = document.querySelectorAll('.notes')[Math.min(i,5)];
+      if(notes){ notes.parentNode.insertBefore(block, notes); }
+      else { mount.appendChild(block); }
+    });
+  }
+
+  seg.addEventListener('click', e=>{
+    const b = e.target.closest('button'); if(!b) return;
+    seg.querySelectorAll('button').forEach(x=>x.classList.remove('on'));
+    b.classList.add('on'); variant = b.dataset.v; build();
+  });
+  cmp.addEventListener('change', build);
+
+  // section 1 has no separate notes element? ensure notes exist: first section uses shellTpl too.
+  build();
+})();
+</script>
+</body>
+</html>

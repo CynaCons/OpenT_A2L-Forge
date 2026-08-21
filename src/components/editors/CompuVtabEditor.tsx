@@ -5,13 +5,14 @@ import {
   Button,
   TextField,
   Stack,
-  Typography,
   Grid,
   Alert,
   Divider,
   IconButton,
 } from "@mui/material";
 import { Add as AddIcon, Delete as DeleteIcon } from "@mui/icons-material";
+import { getEntityAccent } from "../../theme";
+import { SectionHeader } from "../shared";
 
 type CompuVtabData = {
   name: string;
@@ -26,27 +27,7 @@ type CompuVtabEditorProps = {
   onCancel: () => void;
 };
 
-const ACCENT = "#dcdcaa";
-
-function SectionHeader({ title }: { title: string }) {
-  return (
-    <Typography
-      variant="overline"
-      sx={{
-        display: "block",
-        color: "#888",
-        letterSpacing: 1.5,
-        fontSize: 10,
-        borderLeft: `2px solid ${ACCENT}`,
-        pl: 1.5,
-        mb: 0.5,
-        mt: 1,
-      }}
-    >
-      {title}
-    </Typography>
-  );
-}
+const ACCENT = getEntityAccent("CompuVtab");
 
 export function CompuVtabEditor({ moduleName, onSave, onCancel }: CompuVtabEditorProps) {
   const [data, setData] = useState<CompuVtabData>({
@@ -103,7 +84,7 @@ export function CompuVtabEditor({ moduleName, onSave, onCancel }: CompuVtabEdito
     <Box data-testid="editor-compu-vtab" sx={{ display: "flex", flexDirection: "column", gap: 2.5, pt: 1 }}>
       {error && <Alert severity="error">{error}</Alert>}
 
-      <SectionHeader title="Identity" />
+      <SectionHeader title="Identity" accent={ACCENT} />
       <Grid container spacing={2}>
         <Grid size={{ xs: 12 }}>
           <TextField
@@ -118,7 +99,7 @@ export function CompuVtabEditor({ moduleName, onSave, onCancel }: CompuVtabEdito
         </Grid>
       </Grid>
 
-      <SectionHeader title="Description" />
+      <SectionHeader title="Description" accent={ACCENT} />
       <Grid container spacing={2}>
         <Grid size={{ xs: 12 }}>
           <TextField
@@ -133,7 +114,7 @@ export function CompuVtabEditor({ moduleName, onSave, onCancel }: CompuVtabEdito
         </Grid>
       </Grid>
 
-      <SectionHeader title="Value Pairs" />
+      <SectionHeader title="Value Pairs" accent={ACCENT} />
       {data.value_pairs.map((pair, idx) => (
         <Grid container spacing={1} key={idx} alignItems="center">
           <Grid size={{ xs: 4 }}>
@@ -166,7 +147,7 @@ export function CompuVtabEditor({ moduleName, onSave, onCancel }: CompuVtabEdito
         Add Pair
       </Button>
 
-      <SectionHeader title="Default Value" />
+      <SectionHeader title="Default Value" accent={ACCENT} />
       <Grid container spacing={2}>
         <Grid size={{ xs: 12 }}>
           <TextField

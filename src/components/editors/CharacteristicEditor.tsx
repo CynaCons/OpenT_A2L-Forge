@@ -11,6 +11,8 @@ import {
   Alert,
   Divider,
 } from "@mui/material";
+import { getEntityAccent } from "../../theme";
+import { SectionHeader } from "../shared";
 
 type CharacteristicData = {
   name: string;
@@ -42,27 +44,7 @@ const CHARACTERISTIC_TYPES = [
   "VALUE",
 ];
 
-const ACCENT = "#ce9178";
-
-function SectionHeader({ title }: { title: string }) {
-  return (
-    <Typography
-      variant="overline"
-      sx={{
-        display: "block",
-        color: "#888",
-        letterSpacing: 1.5,
-        fontSize: 10,
-        borderLeft: `2px solid ${ACCENT}`,
-        pl: 1.5,
-        mb: 0.5,
-        mt: 1,
-      }}
-    >
-      {title}
-    </Typography>
-  );
-}
+const ACCENT = getEntityAccent("Characteristic");
 
 export function CharacteristicEditor({
   initialName,
@@ -116,7 +98,7 @@ export function CharacteristicEditor({
       {error && <Alert severity="error">{error}</Alert>}
 
       {/* Identity */}
-      <SectionHeader title="Identity" />
+      <SectionHeader title="Identity" accent={ACCENT} />
       <Grid container spacing={2}>
         <Grid size={{ xs: 12, sm: 8 }}>
           <TextField
@@ -148,7 +130,7 @@ export function CharacteristicEditor({
       </Grid>
 
       {/* Description */}
-      <SectionHeader title="Description" />
+      <SectionHeader title="Description" accent={ACCENT} />
       <Grid container spacing={2}>
         <Grid size={{ xs: 12 }}>
           <TextField
@@ -165,7 +147,7 @@ export function CharacteristicEditor({
       </Grid>
 
       {/* Address */}
-      <SectionHeader title="Address" />
+      <SectionHeader title="Address" accent={ACCENT} />
       <Grid container spacing={2}>
         <Grid size={{ xs: 12, sm: 6 }}>
           <TextField
@@ -191,7 +173,7 @@ export function CharacteristicEditor({
       </Grid>
 
       {/* Range */}
-      <SectionHeader title="Range" />
+      <SectionHeader title="Range" accent={ACCENT} />
       <Grid container spacing={2}>
         <Grid size={{ xs: 12, sm: 6 }}>
           <TextField
@@ -218,7 +200,7 @@ export function CharacteristicEditor({
       </Grid>
 
       {/* References */}
-      <SectionHeader title="References" />
+      <SectionHeader title="References" accent={ACCENT} />
       <Grid container spacing={2}>
         <Grid size={{ xs: 12 }}>
           <TextField

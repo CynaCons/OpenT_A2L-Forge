@@ -26,6 +26,7 @@
     "react-dom": "^19.1.0"
   },
   "devDependencies": {
+    "@axe-core/playwright": "^4.13.0",
     "@playwright/test": "^1.54.0",
     "@tauri-apps/cli": "^2",
     "@types/react": "^19.1.8",

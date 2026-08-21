@@ -1,4 +1,5 @@
 import { Box, Button, Divider, Typography } from "@mui/material";
+import { tokens } from "../../theme";
 
 interface SettingsPanelProps {
   onClearRecents: () => void;
@@ -13,7 +14,7 @@ export function SettingsPanel({ onClearRecents }: SettingsPanelProps) {
       <Button size="small" variant="outlined" onClick={onClearRecents}>Clear Recent Files</Button>
       <Divider sx={{ my: 2 }} />
       <Typography variant="subtitle2" sx={{ mb: 1 }}>Keyboard Shortcuts</Typography>
-      <Box sx={{ fontSize: 12, fontFamily: "monospace", color: "#aaa" }}>
+      <Box sx={{ fontSize: 12, fontFamily: "monospace", color: tokens.textMuted }}>
         <Typography variant="caption" display="block">Ctrl+N &emsp; New A2L</Typography>
         <Typography variant="caption" display="block">Ctrl+O &emsp; Open A2L</Typography>
         <Typography variant="caption" display="block">Ctrl+S &emsp; Save</Typography>

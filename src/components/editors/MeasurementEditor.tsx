@@ -11,6 +11,8 @@ import {
   Alert,
   Divider,
 } from "@mui/material";
+import { DATA_TYPES, getEntityAccent } from "../../theme";
+import { SectionHeader } from "../shared";
 
 type MeasurementData = {
   name: string;
@@ -30,41 +32,7 @@ type MeasurementEditorProps = {
   onCancel: () => void;
 };
 
-const DATA_TYPES = [
-  "UBYTE",
-  "SBYTE",
-  "UWORD",
-  "SWORD",
-  "ULONG",
-  "SLONG",
-  "A_UINT64",
-  "A_INT64",
-  "FLOAT16_IEEE",
-  "FLOAT32_IEEE",
-  "FLOAT64_IEEE",
-];
-
-const ACCENT = "#4ec9b0";
-
-function SectionHeader({ title }: { title: string }) {
-  return (
-    <Typography
-      variant="overline"
-      sx={{
-        display: "block",
-        color: "#888",
-        letterSpacing: 1.5,
-        fontSize: 10,
-        borderLeft: `2px solid ${ACCENT}`,
-        pl: 1.5,
-        mb: 0.5,
-        mt: 1,
-      }}
-    >
-      {title}
-    </Typography>
-  );
-}
+const ACCENT = getEntityAccent("Measurement");
 
 export function MeasurementEditor({
   initialName,
@@ -118,7 +86,7 @@ export function MeasurementEditor({
       {error && <Alert severity="error">{error}</Alert>}
 
       {/* Identity */}
-      <SectionHeader title="Identity" />
+      <SectionHeader title="Identity" accent={ACCENT} />
       <Grid container spacing={2}>
         <Grid size={{ xs: 12, sm: 8 }}>
           <TextField
@@ -150,7 +118,7 @@ export function MeasurementEditor({
       </Grid>
 
       {/* Description */}
-      <SectionHeader title="Description" />
+      <SectionHeader title="Description" accent={ACCENT} />
       <Grid container spacing={2}>
         <Grid size={{ xs: 12 }}>
           <TextField
@@ -167,7 +135,7 @@ export function MeasurementEditor({
       </Grid>
 
       {/* Range */}
-      <SectionHeader title="Range" />
+      <SectionHeader title="Range" accent={ACCENT} />
       <Grid container spacing={2}>
         <Grid size={{ xs: 12, sm: 6 }}>
           <TextField
@@ -194,7 +162,7 @@ export function MeasurementEditor({
       </Grid>
 
       {/* Precision */}
-      <SectionHeader title="Precision" />
+      <SectionHeader title="Precision" accent={ACCENT} />
       <Grid container spacing={2}>
         <Grid size={{ xs: 12, sm: 6 }}>
           <TextField
@@ -221,7 +189,7 @@ export function MeasurementEditor({
       </Grid>
 
       {/* References */}
-      <SectionHeader title="References" />
+      <SectionHeader title="References" accent={ACCENT} />
       <Grid container spacing={2}>
         <Grid size={{ xs: 12 }}>
            <TextField

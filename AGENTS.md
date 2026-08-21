@@ -49,6 +49,7 @@ npx playwright test
 - **data-testid**: All interactive UI elements must have `data-testid` attributes. Tests use `page.getByTestId()`.
 - **SRS docs**: Stored in `docs/srs/SRS-R[N]-*.md`. Index at `docs/srs/SRS-INDEX.md`.
 - **PLAN.md**: Must be updated in realtime for each task or subtask accomplished.
+- **powerplan (MCP)**: `PLAN.md` is managed by the `powerplan` MCP server (registered in `.opencode/opencode.json`). Agents MUST prefer powerplan tools over freeform PLAN.md edits: `get_current_iteration` / `get_iteration` instead of reading the whole file, `complete_task` / `update_task` / `add_task` for mutations, `create_iteration` / `create_major` for new sections, and `check_plan` to lint structure. Format: `## vX.Y — Title` majors, `### vX.Y.Z — Title` iterations, `**Goal:**` lines, checkbox tasks, `## Backlog`.
 - **Smoke test**: Always run `npm run dev` or `npm run tauri dev` before reporting completion to verify no crashes.
 - **Fixtures**: A2L fixtures in `external/a2ltool/fixtures/a2l/`, ELF fixtures in `external/a2ltool/fixtures/bin/`.
 - **Core functions**: Backend logic is in `core_*` functions (no Tauri dependency). Tauri commands are thin wrappers.
