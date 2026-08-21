@@ -108,8 +108,13 @@ export async function saveCliProject(page: Page, filePath: string): Promise<void
 
 /** Create a new empty A2L via the UI button (no dialog needed) */
 export async function createNewA2l(page: Page): Promise<void> {
-  await page.getByTestId("sidebar-explorer").click();
-  await page.getByTestId("btn-new-a2l").click();
+  // Clicking the already-active activity-bar view toggles the sidebar,
+  // so only switch to the explorer if it is not visible yet.
+  const newBtn = page.getByTestId("btn-new-a2l");
+  if (!(await newBtn.isVisible().catch(() => false))) {
+    await page.getByTestId("sidebar-explorer").click();
+  }
+  await newBtn.click();
   await page.getByTestId("entity-tree").waitFor({ timeout: 10000 });
 }
 

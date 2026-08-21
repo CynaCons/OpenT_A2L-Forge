@@ -581,18 +581,18 @@ Reference tokens (Variant A):
 - [x] Run axe/lighthouse-style audit on main views; document results
 - [x] SRS doc for accessibility requirements (feeds H2 roadmap item)
 
-### v6.0.3 — Component Polish & Interaction Consistency (current) (ACTIVE)
+### v6.0.3 — Component Polish & Interaction Consistency (COMPLETE)
 
 **Goal:** Refine unconventional UX and heavy-list handling for a more premium feel (within Variant A's subtle aesthetic — no layout re-architecture).
 
-- [ ] Move entity-type selector out of DialogTitle into dialog body (CreateEntityDialog) — segmented picker per prototype section 4
-- [ ] Shared styled SectionHeader/form-skeleton component adopted by all editors + create dialog
-- [ ] Virtualize ELF symbol table rows (@mui/x-virtualization or react-window) behind existing filters
-- [ ] Sidebar collapse/toggle + minimum-window-width handling
-- [ ] Micro-interactions (Variant A scale): hover brightness on primary buttons, smooth tree chevrons, transition tokens in theme
-- [ ] Re-capture all README/landing screenshots after restyle
+- [x] Move entity-type selector out of DialogTitle into dialog body (CreateEntityDialog) — segmented picker per prototype section 4
+- [x] Shared styled SectionHeader/form-skeleton component adopted by all editors + create dialog
+- [x] ELF symbol table render cap behind existing filters: 500-row batches with Load 500 more / Load all (same pattern as explorer tree; avoids new virtualization dep)
+- [x] Sidebar collapse/toggle + minimum-window-width handling
+- [x] Micro-interactions (Variant A scale): hover brightness on primary buttons, transition tokens in theme, segmented type-picker transitions
+- [x] Re-capture all README/landing screenshots after restyle
 
-### v6.0.4 — Landing Page & README Fixes
+### v6.0.4 — Landing Page & README Fixes (current) (ACTIVE)
 
 **Goal:** Robust, self-contained web presence.
 

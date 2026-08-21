@@ -6,6 +6,7 @@ import { open, save } from "@tauri-apps/plugin-dialog";
 import {
   Box,
   CssBaseline,
+  IconButton,
   LinearProgress,
   ThemeProvider,
 } from "@mui/material";
@@ -44,6 +45,7 @@ import { ConflictDialog } from "./components/dialogs/ConflictDialog";
 import { PreviewDialog } from "./components/dialogs/PreviewDialog";
 import { UnsavedDialog } from "./components/dialogs/UnsavedDialog";
 import { CreateEntityDialog } from "./components/dialogs/CreateEntityDialog";
+import { KeyboardArrowLeft as KeyboardArrowLeftIcon } from "@mui/icons-material";
 
 const RECENT_A2L_KEY = "opent-a2l-recents";
 const RECENT_ELF_KEY = "opent-elf-recents";
@@ -1032,8 +1034,8 @@ function App() {
           <ActivityBar
             activeView={activeView}
             onViewChange={(v) => {
-              if (v === activeView) setSidebarOpen(o => !o);
-              else { setActiveView(v); setSidebarOpen(true); }
+              setActiveView(v);
+              setSidebarOpen(true);
             }}
           />
 
@@ -1049,6 +1051,17 @@ function App() {
             whiteSpace: "nowrap",
             overflow: "hidden",
           }}>
+            <Box sx={{ display: "flex", justifyContent: "flex-end", px: 0.5, pt: 0.5 }}>
+              <IconButton
+                size="small"
+                data-testid="btn-toggle-sidebar"
+                aria-label="Toggle sidebar"
+                title="Toggle sidebar (Ctrl+B)"
+                onClick={() => setSidebarOpen(false)}
+              >
+                <KeyboardArrowLeftIcon fontSize="small" />
+              </IconButton>
+            </Box>
             {activeView === "a2l" && (
               <ExplorerPanel
                 metadata={metadata}
