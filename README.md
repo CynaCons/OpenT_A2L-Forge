@@ -21,6 +21,16 @@ Grab the latest portable binaries from [Releases](https://github.com/CynaCons/Op
 
 No installer needed — extract and run. The standalone CLI binary (`opent_a2l_forge_cli`) is published alongside the desktop app in the same release.
 
+## Feedback & Feature Requests
+
+**This project grows from what its users need — tell us!** If A2L-Forge is missing something you'd want, behaves unexpectedly, or you have an idea that would make your calibration workflow easier:
+
+- [Open an issue](https://github.com/CynaCons/OpenT_A2L-Forge/issues) — bug reports, change requests, and "it would be great if…" ideas are all welcome
+- Feature requests directly shape the [roadmap](#roadmap)
+- Pull requests are equally appreciated
+
+Don't be shy: even a one-line wish like *"support XYZ element"* is genuinely useful.
+
 ---
 
 ## Screenshots

@@ -1,0 +1,4 @@
+User-agent: *
+Allow: /
+
+Sitemap: https://cynacons.github.io/OpenT_A2L-Forge/sitemap.xml
