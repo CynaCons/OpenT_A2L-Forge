@@ -16,6 +16,8 @@
         "title": "OpenT A2L Forge",
         "decorations": false,
         "width": 800,
+        "minWidth": 720,
+        "minHeight": 480,
         "height": 600
       }
     ],

@@ -1,3 +1,4 @@
+import { useEffect, useState } from "react";
 import {
   Alert,
   Box,
@@ -119,6 +120,15 @@ export function ElfMainPanel({
       onElfSortDirectionChange("asc");
     }
   };
+
+  // Render cap for large symbol tables (same pattern as the explorer tree).
+  const ROW_BATCH = 500;
+  const [rowLimit, setRowLimit] = useState(ROW_BATCH);
+  useEffect(() => {
+    setRowLimit(ROW_BATCH);
+  }, [elfSearchQuery, elfFilterTypes, elfFilterSections, elfFilterBinds]);
+  const visibleRows = elfDisplayRows.slice(0, rowLimit);
+  const hiddenRows = elfDisplayRows.length - visibleRows.length;
 
   return (
     <Box sx={{ flex: 1, display: "flex", flexDirection: "column", height: "100%", bgcolor: tokens.bg, overflow: "hidden" }}>
@@ -322,7 +332,7 @@ export function ElfMainPanel({
               </TableRow>
             </TableHead>
             <TableBody>
-              {elfDisplayRows.map((row) => {
+              {visibleRows.map((row) => {
                 const isStructParent = structParentNames.has(row.name);
                 if (isStructParent) {
                   const isCollapsed = collapsedStructs.has(row.name);
@@ -431,6 +441,27 @@ export function ElfMainPanel({
                   </TableRow>
                 );
               })}
+              {hiddenRows > 0 && (
+                <TableRow>
+                  <TableCell colSpan={8} sx={{ textAlign: "center", py: 1 }}>
+                    <Button
+                      data-testid="btn-elf-load-more"
+                      size="small"
+                      onClick={() => setRowLimit(l => l + ROW_BATCH)}
+                    >
+                      Load 500 more ({hiddenRows} remaining)
+                    </Button>
+                    <Button
+                      data-testid="btn-elf-load-all"
+                      size="small"
+                      sx={{ ml: 1 }}
+                      onClick={() => setRowLimit(Infinity)}
+                    >
+                      Load all
+                    </Button>
+                  </TableCell>
+                </TableRow>
+              )}
             </TableBody>
           </Table>
         </TableContainer>

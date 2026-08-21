@@ -26,6 +26,7 @@ export const tokens = {
   statusError: "#9a3324",
   // Darker accent shade for the status bar: white text on it must meet WCAG AA (≥4.5:1).
   statusBarBg: "#1f6feb",
+  transition: "150ms ease",
 } as const;
 
 /** Standard ASAP2 data types (superset used by create forms and editors). */
@@ -92,6 +93,7 @@ export const ideTheme = createTheme({
         contained: {
           backgroundColor: tokens.statusBarBg,
           "&:hover": { backgroundColor: "#1b5fd0" },
+          "&:active": { filter: "brightness(0.92)" },
         },
       },
     },
@@ -105,6 +107,7 @@ export const ideTheme = createTheme({
         root: {
           borderRadius: 4,
           marginBottom: 1,
+          transition: `background-color ${tokens.transition}`,
           "&.Mui-selected": {
             backgroundColor: tokens.selection,
             borderLeft: `3px solid ${tokens.accent}`,

@@ -51,6 +51,7 @@ const CLI_SYNC_PROJECT_VERSION = 1;
 
 function App() {
   const [activeView, setActiveView] = useState<"a2l" | "elf" | "settings">("a2l");
+  const [sidebarOpen, setSidebarOpen] = useState(true);
   const [searchQuery, setSearchQuery] = useState("");
   const [metadata, setMetadata] = useState<A2lMetadata | null>(null);
   const [fileName, setFileName] = useState("");
@@ -969,6 +970,7 @@ function App() {
         if (e.key === "s" && e.shiftKey) { e.preventDefault(); handleSaveAsA2l(); }
         else if (e.key === "s") { e.preventDefault(); handleSaveA2l(); }
         if (e.key === "n") { e.preventDefault(); handleCreateA2l(); }
+        if (e.key === "b") { e.preventDefault(); setSidebarOpen(o => !o); }
       }
       if (e.key === "Escape" && isEditing) { setIsEditing(false); }
       if (e.key === "Delete" && selectedDeletableItems.length > 0 && !isEditing) {
@@ -998,7 +1000,7 @@ function App() {
   return (
     <ThemeProvider theme={ideTheme}>
       <CssBaseline />
-      <Box sx={{ display: "flex", flexDirection: "column", height: "100vh", bgcolor: "#1e1e1e", overflow: "hidden" }}>
+      <Box sx={{ display: "flex", flexDirection: "column", height: "100vh", bgcolor: tokens.bg, overflow: "hidden" }}>
 
         <TitleBar
           fileName={fileName}
@@ -1027,13 +1029,19 @@ function App() {
 
         {/* Content */}
         <Box sx={{ flex: 1, display: "flex", overflow: "hidden" }}>
-          <ActivityBar activeView={activeView} onViewChange={setActiveView} />
+          <ActivityBar
+            activeView={activeView}
+            onViewChange={(v) => {
+              if (v === activeView) setSidebarOpen(o => !o);
+              else { setActiveView(v); setSidebarOpen(true); }
+            }}
+          />
 
           {/* Sidebar */}
+          {sidebarOpen && (
           <Box sx={{
-            minWidth: 280,
-            maxWidth: "40vw",
-            width: "fit-content",
+            width: 280,
+            flexShrink: 0,
             bgcolor: tokens.surface,
             display: "flex",
             flexDirection: "column",
@@ -1085,6 +1093,7 @@ function App() {
               />
             )}
           </Box>
+          )}
 
           {/* Main Area */}
           {activeView === "elf" ? (
