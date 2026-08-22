@@ -23,7 +23,7 @@ export function SettingsPanel({ onClearRecents }: SettingsPanelProps) {
       </Box>
       <Divider sx={{ my: 2 }} />
       <Typography variant="subtitle2" sx={{ mb: 1 }}>About</Typography>
-      <Typography variant="body2" color="text.secondary">OpenT A2L Forge v0.1.0</Typography>
+      <Typography variant="body2" color="text.secondary">OpenT A2L Forge v0.2.0</Typography>
       <Typography variant="caption" color="text.secondary" display="block">Tauri + React + Rust</Typography>
     </Box>
   );
