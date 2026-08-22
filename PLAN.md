@@ -7,7 +7,7 @@
 
 | Version | Status |
 |---------|--------|
-| v6.0 | **COMPLETE** — Visual Upgrade phase shipped (v6.0.1–v6.0.4). Next work: pick from Backlog or Series E–H. |
+| v6.0 | **COMPLETE** — Visual Upgrade phase shipped (v6.0.1–v6.0.4) and released as [v0.2.0](https://github.com/CynaCons/OpenT_A2L-Forge/releases/tag/v0.2.0) with 3-platform binaries (2026-08-22). Next work: pick from Backlog or Series E–H. |
 
 ## v1.0 — Foundations & Core A2L I/O
 
